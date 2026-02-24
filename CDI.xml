@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?xml-stylesheet type="text/xsl" href="http://openlcb.org/trunk/prototypes/xml/xslt/cdi.xsl"?>
+<cdi xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://openlcb.org/schema/cdi/1/4/cdi.xsd">
+    <identification>
+        <manufacturer>MANU</manufacturer>
+        <model>MODEL</model>
+        <hardwareVersion>2.6A</hardwareVersion>
+        <softwareVersion>2.1</softwareVersion>
+    </identification>
+    <acdi/>
+    <segment origin="0" space="253">
+        <name>Node</name>
+        <group>
+            <name>Node ID</name>
+            <description>User-provided description of the node</description>
+            <string size="62">
+                <name>Node Name</name>
+            </string>
+            <string size="63">
+                <name>Node Description</name>
+            </string>
+        </group>
+    </segment>
+    <segment origin="125" space="253">
+        <name>Reset Control</name>
+        <description>Controls Actions at Next Board Reset. Reloading User or Factory Defaults</description>
+        <int size="1">
+            <name>Flag</name>
+            <default>238</default>
+            <map>
+                <relation>
+                    <property>238</property>
+                    <value>Normal Operation</value>
+                </relation>
+                <relation>
+                    <property>51</property>
+                    <value>Clear Everything but Create New Unused EventIDs</value>
+                </relation>
+                <relation>
+                    <property>255</property>
+                    <value>Clear Everything back to Factory Defaults</value>
+                </relation>
+            </map>
+        </int>
+    </segment>
+    <segment origin="126" space="253">
+        <name>Parameters</name>
+        <description>Setup for Turntable control.</description>
+        <group>
+            <name>Track</name>
+            <description>Parameters for turntable trackage</description> 
+            <int size='1'>
+                <name>Track Count</name>
+                <description>Nunmber of tracks to the turntable</description>
+                <min>1</min><max>20</max>
+                <default>14</default>
+            </int>
+            <int size='1'>
+                <name>Home Track</name>
+                <description>Track to go to after homing</description>
+                <min>1</min><max>20</max>
+                <default>3</default>
+            </int>
+            <int size='1'>
+                <name>Reference Correction Count</name>
+                <description>Number of reference locations for correction, if 0 then no reference locations and correction is disabled, if > 0 then the number of reference locations is equal to the number of tracks and they are located at the same position as the tracks</description>
+                <min>0</min><max>6</max>
+                <default>0</default>
+            </int>
+            <int size='4'>
+                <name>Full Turn Steps</name>
+                <description>Number of stepper motor steps in a full rotation of the turntable</description>
+                <min>0</min><max>96000</max>
+                <default>12000</default>
+            </int>
+            <eventid><name>Rehome (C)</name></eventid>
+            <eventid><name>Increment Track (C)</name></eventid>
+            <eventid><name>Decrement Track (C)</name></eventid>
+            <eventid><name>Rotate Track 180 degrees (C)</name></eventid>
+            <eventid><name>Toggle Bridge Lights (C)</name></eventid>
+            <group replication='20'> 
+                <name>Tracks</name>
+                <repname>Trk 0</repname>
+                <string size='25'><name>Description</name></string>
+                <string size='5'><name>Short Name</name></string>
+                <eventid><name>Align Front (C)</name></eventid>
+                <eventid><name>Align Back (C)</name></eventid>
+                <int size='4'>
+                    <name>Front Stepper Position in Steps</name>
+                    <min>0</min><max>96000</max><default>10</default>
+                </int>
+                <eventid><name>Occupancy Sensor (C)</name></eventid>
+                <eventid><name>RailCom Sensor (C)</name></eventid>
+            </group>
+        </group>
+        <group>
+            <name>Doors</name>
+            <description>Parameters for Door control</description> 
+                <int size='1'>
+                    <name>Active Doors</name><description>Number of active doors</description>
+                    <min>0</min><max>16</max><default>10</default>
+                </int>
+            <eventid><name>Open All Doors (P)</name></eventid>
+            <eventid><name>Close All Doors (P)</name></eventid>
+            <group replication='16'> 
+                <name>Door</name>
+                <repname>Door 1</repname>
+                <string size='16'><name>Description</name></string>
+                <string size='5'><name>Short Name</name></string>   
+                <eventid><name>Toggle Door (P)</name></eventid>
+                <int size='1'>
+                    <name>Track Number</name>
+                    <description>The track number associated with the door</description>
+                    <min>0</min><max>20</max>
+                    <default>0</default>
+                </int>
+            </group>
+        </group>
+        <group>
+            <name>Lights</name>
+            <description>Parameters for Light control</description> 
+            <eventid><name>Toggle Bridge Lights (C)</name></eventid>
+            <eventid><name>Toggle Interior Lights (P)</name></eventid>
+            <eventid><name>Toggle Exterior Lights (P)</name></eventid>
+            <int size='1'>
+            <name>Maximum Luminosity</name>
+                <description>Full luminesence factor</description>
+                <min>10</min><max>255</max><default>150</default>
+            <hints><slider tickSpacing='60' immediate='no' showValue='yes'></slider></hints>
+            </int>
+            <eventid><name>Full Luminosity On (C)</name></eventid>
+            <int size='1'>
+            <name>Minimum Luminosity</name>
+                <description>Dimmed luminesence factor</description>
+                <min>10</min><max>255</max><default>50</default>
+            <hints><slider tickSpacing='60' immediate='no' showValue='yes'></slider></hints>
+            </int>
+            <eventid><name>Low Luminosity On (C)</name></eventid>
+        </group>
+    </segment>
+</cdi>

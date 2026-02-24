@@ -1,0 +1,1012 @@
+/*
+ * Parts of this © 2022 Peter Cole, 2023-5 Bob Gamble
+ *
+ *  This file is a part of the LCC Turntable project
+ *
+ *  This is free software: you can redistribute it and/or modify
+ *  it under the terms of the GNU General Public License as published by
+ *  the Free Software Foundation, either version 3 of the License, or
+ *  (at your option) any later version.
+ *
+ *  It is distributed in the hope that it will be useful,
+ *  but WITHOUT ANY WARRANTY; without even the implied warranty of
+ *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ *  GNU General Public License for more details.
+ *
+ *  For a copy of the GNU General Public License see <https://www.gnu.org/licenses/>.
+*/
+
+#include "UserInterface.h"
+#include "BoardSettings.h"
+#include "TTvariables.h"
+#include <NeoPixelConnect.h>
+
+#include <SPI.h>    // Call up the TFT driver library
+#include <TFT_eSPI.h>      // Hardware-specific library
+// #include <TFT_Touch.h>    // Call up touch screen library
+// #include <bb_captouch.h>
+#include "src/application_drivers/my_bb_captouch.h"
+#include <cstring>
+#include "mdebugging.h"
+
+
+// extern AccelStepper stepper;
+
+/*
+typedef struct _fttouchinfo
+{
+  int count;
+  uint16_t x[5], y[5];
+  uint8_t pressure[5], area[5];
+} TOUCHINFO;
+*/
+TOUCHINFO ti;
+TOUCHINFO  _current_state = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+TOUCHINFO  _last_state = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+
+const char *szNames[] = {"Unknown", "FT6x36", "GT911", "CST820", "CST226", "MXT144", "AXS15231"};
+
+BBCapTouch tp;
+
+// #include "TAMC_GT911.h"
+/*
+typedef struct
+{
+  uint8_t id;
+  uint16_t x;
+  uint16_t y;
+  uint8_t size;
+} TP_Point;
+*/
+
+// TP_Point  _current_state = TP_Point(0,0,0,0);
+// TP_Point  _last_state = TP_Point(0,0,0,0);
+bool _changed = false;
+uint32_t read_started_ms = millis();
+uint32_t _last_change = millis();
+uint32_t _db_time = DEBOUNCE_TOUCH;	// Debounce time (ms).
+
+// Create an instance of NeoPixelConnect and initialize it
+// to use GPIO pin PixelPin as the control pin, for a string
+// of PixelCount neopixels. Name the instance strip
+
+NeoPixelConnect strip(PixelPin, PixelCount, NeoPixel_PIO, 0);
+
+bool pixelsOn = false;
+int activeScreen = 0;
+int editTrack = 0;
+int editServo = 0;
+
+unsigned long gearingFactor = STEPPER_GEARING_FACTOR;
+// const byte numChars = 20;
+// char serialInputChars[numChars];
+// bool newSerialData = false;
+// bool testCommandSent = false;
+// uint8_t testActivity = 0;
+// uint8_t testStepsMSB = 0;
+// uint8_t testStepsLSB = 0;
+
+HotBox HotBoxes[PossibleBoxes];
+
+// Invoke custom TFT driver library
+TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
+
+extern bool isStepperRunning();
+extern long getCurrentPosition();
+extern void runStepper();
+
+/* Create an instance of the touch screen library */
+// TAMC_GT911 tp = TAMC_GT911(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, HRES, VRES);
+// TFT_Touch touch = TFT_Touch(DCS, DCLK, DIN, DOUT);
+
+// ===== Process Consumer-eventIDs =====
+void TurntableCallback(uint16_t callin) {
+  dP("\nEventid callback: index="); dP((uint16_t)callin); 
+  uint16_t index;
+  uint8_t current;
+  uint8_t target;
+  index = callin;
+// Invoked when an event is consumed; 
+// drive actions as needed from index of all events.
+//
+//dPS((const char*)"\npceCallback: Event Index: ", index);
+// dP("\neventid callback: index="); dP((uint16_t)index);
+  if (index < NUM_TABLE_EVENTS){    
+        switch (index) { //
+          case 0:  // CEID(Rehome)
+          touchCommand(4);
+          break;
+          case 1:  //  CEID(IncrementTrack) 
+          touchCommand(9);
+          break;
+          case 2:  //  CEID(DecrementTrack) 
+          touchCommand(5);
+          break;
+          case 3:  //  CEID(RotateTrack180) 
+          touchCommand(1);
+          break;
+          case 4:  //  CEID(ToggleBridgeLights) 
+          touchCommand(2);
+          break;
+          default:
+            // do nothing
+          break;
+        }
+  }
+  else 
+  if (index < NUM_TABLE_EVENTS + NUM_TRACK_EVENTS){
+    index = index - NUM_TABLE_EVENTS;
+    uint8_t track = index / 2;
+    uint8_t outputState = index % 2;
+    if (outputState) {
+      // move back side to track
+      // move to track backward
+      MoveToTrack(track,0);
+    }
+    else {
+      // move front side to track
+      // move to track foreward
+      MoveToTrack(track,32);
+    }
+      
+      // toggle door to track w/redraw
+      if (Tracks[track].doorPresent) 
+      {
+        // if (Servos[Tracks[track].servoNumber].Status)
+        // {              MoveServo(Tracks[track].servoNumber, 0);            }
+        // else
+        // {              MoveServo(Tracks[track].servoNumber, 32);            }
+        drawTrack(track,((Tracks[track].trackFront*360)/fullTurnSteps));
+      }
+  }
+  else {    
+// skip Door events as they are produced, not consumed
+    index = index - NUM_DOOR_EVENTS;
+    if (index < NUM_LUM_EVENTS){
+        switch (index) { //, , , , 
+          case 0:  //   CEID(eidBridge)
+          touchCommand(2);
+          break;
+          case 1:  //  PEID(eidInterior)
+          // produced
+          break;
+          case 2:  //  PEID(eidExterior)
+          // produced
+          break;
+          case 3:  //  CEID(eidHighLuminosity_On)
+          DimmerHigh();      // go to high luminosity
+          break;
+          case 4:  //  CEID(eidLowLuminosity_On)
+          DimmerLow();       // go to low luminosity 
+          break;
+          default:
+            // do nothing
+          break;
+        }
+      }
+  }
+}
+
+
+void setupDisplay()
+{  
+  tft.init();
+  tft.setRotation(ROTATION);   // Set TFT the screen to landscape orientation
+  tft.fillScreen(TFT_BLACK);
+  tft.setTextDatum(TC_DATUM);  // Set text plotting reference datum to Top Centre (TC)
+  tft.setTextColor(TFT_WHITE, TFT_BLACK); // Set text to white on black
+
+  // calibration values from prior run of the display calibration library example
+// touch.setCal(3668, 365, 3422, 258, 480, 320, 1);
+// touch.setCal(3671, 356, 3459, 297, 480, 320, 1);
+
+  // tp.init(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_INT);
+  // int iType = tp.sensorType();
+  // Serial.printf("Sensor type = %s\n", szNames[iType]);
+
+  tp.init(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_INT, 400000, &TOUCH_WIRE);
+  int iType = tp.sensorType();
+  Serial.printf("Sensor type = %s\n", szNames[iType]);
+
+  Serial.println("bb_captouch Touch: Ready");
+  // tp.begin();
+  
+    // int setOrientation(int iOrientation, int iWidth, int iHeight);
+  int result = tp.setOrientation(TOUCH_ROTATION, HRES, VRES);
+
+  // pinMode(TFT_BL, OUTPUT);    // lcd light
+  // digitalWrite(TFT_BL, LOW);
+  // digitalWrite(TFT_BL, HIGH);
+
+  Serial.println(F("Setup Display"));  
+  tft.setCursor(0, 0, 4);
+  tft.println(F("LCC Turntable Control"));  
+  tft.setCursor(50, 50, 2);
+  tft.println("");
+  tft.print(F("Version "));
+  tft.println(VERSION);
+  tft.print(F("by Bob Gamble"));
+
+  String text;
+  text+= "Screen rotation = ";
+  text+= tft.getRotation();
+  char buffer[30];
+  text.toCharArray(buffer,30);
+  tft.drawString(buffer, 350, 250, 2);
+
+  activeScreen = 0;
+
+  for (int i = 0; i < (sizeof(HotBoxes) / sizeof(HotBox)); i++) {
+    HotBoxes[i].screen = 0;
+    HotBoxes[i].X1 = 0;
+    HotBoxes[i].X2 = 0;
+    HotBoxes[i].Y1 = 0;
+    HotBoxes[i].Y2 = 0;
+  }
+
+  Serial.println(F("<<< Display READY >>>"));
+// write_to_display();
+}
+
+void displayConfig() {  // Function to display the defined stepper motor config.
+  // Basic setup, display what this is.
+  // Serial.begin(115200);
+  // while(!Serial);
+  Serial.print(F("LCC Turntable version "));
+  Serial.println(VERSION);
+  if (fullTurnSteps == 0) {
+    Serial.println(F("LCC-Turntable has not been calibrated yet"));
+  } else {
+#ifdef FULL_STEP_COUNT    
+    Serial.print(F("Manual override has been set for "));
+#else
+    Serial.print(F("LCC-Turntable has been calibrated for "));
+#endif
+    Serial.print(fullTurnSteps);
+    Serial.println(F(" steps per revolution"));
+  }
+  Serial.print(F("Gearing factor set to "));
+  Serial.println(gearingFactor);
+  
+  if (calibrating) {
+    Serial.println(F("Calibrating..."));
+  } else {
+    if (homed == 0 ){
+      Serial.println(F("Homing..."));
+    }
+  }
+
+}
+
+void notice(const char *string)
+{
+  NOTICE_PRINT.println(string);
+}
+
+void drawButton(int box, int length, int32_t x, int32_t y, uint32_t fg_color,const char *string)
+{
+// Draw a rounded rectangle that has a line thickness of r-ir+1 and bounding box defined by x,y and w,h
+// The outer corner radius is r, inner corner radius is ir
+// The inside and outside of the border are anti-aliased
+// drawSmoothRoundRect(int32_t x, int32_t y, int32_t r, int32_t ir, int32_t w, int32_t h, uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF, uint8_t quadrants = 0xF);
+tft.setTextDatum(TC_DATUM);  // Set text plotting reference datum to Top Centre (TC)
+tft.setTextPadding(tft.textWidth(string, 2)); // get the width of the text in pixels
+tft.drawSmoothRoundRect( x,  y,  10,  9,  length,  24,  fg_color, TFT_BLACK, 0xF);
+setHotSpot(box, x, y, x + length, y + 23);
+tft.drawString(string, x+(length/2), y+4, 2);
+tft.setTextPadding(0); // set to zero
+}
+
+void drawHomePage()
+{
+  activeScreen = 1;
+  /*
+  main page from which to operate
+  shows turntable with tracks and doors
+  operational buttons for main TT functions and lights
+  links to configuration settings and diagnostic reports
+  */
+  int butLen = 100;
+  int Lcol = 5;
+  int Rcol = HRES - butLen - 5;
+  int vSpace = 40;
+  int row = 5;
+  // Clear the screen
+  tft.fillScreen(TFT_BLACK);
+  drawButton(13,butLen,Lcol,row,TFT_GREEN,"Diagnostics"); // go to diagnostics page
+  // drawButton(12,butLen,Lcol,row,TFT_GREEN,"Settings");  // go to settings page
+  row = row + vSpace;
+  // drawButton(18,butLen,Lcol,row,TFT_GREEN,"Configuration"); // go to config page
+  // drawButton(18,butLen,Lcol,row,TFT_GREEN,"Configuration"); // go to config page
+  row = row + vSpace;
+  drawButton(3,90,Lcol,row,TFT_GREEN,"Configure");  // run configuration routine
+  row = row + vSpace;
+  drawButton(4,butLen,Lcol,row,TFT_GREEN,"Re-Home");  // run find home routine
+  row = row + vSpace*5;
+  drawButton(5,butLen,Lcol,row,TFT_GREEN,"Decrement");  // move one track back
+  drawButton(9,butLen,Rcol,row,TFT_GREEN,"Increment");  // move to next track
+  row = 5;
+  drawButton(7,butLen,Rcol,row,TFT_GREEN,"RH Interior");  // toggle RH interior light
+  row = row + vSpace;
+  drawButton(8,butLen,Rcol,row,TFT_GREEN,"RH Exterior");  // toggle RH exterior light
+  row = row + (vSpace * 2);
+  drawButton(10,butLen,Rcol,row,TFT_GREEN,"Open All");  // open all doors
+  row = row + vSpace;
+  drawButton(11,butLen,Rcol,row,TFT_GREEN,"Close All"); // close all doors
+  row = VRES - vSpace;
+  drawButton(6,250,((HRES/2)-375),row,TFT_GREEN,"Clockwise Bump Bar");  // execute bump bar routine
+  drawButton(6,250,((HRES/2)+125),row,TFT_GREEN,"Counterclockwise Bump Bar");  // execute bump bar routine
+  setHotSpot(6, 1, row, HRES - 2, row + 23);
+
+  drawTurnTable();
+}
+
+
+
+void drawButtonPage()
+{
+  activeScreen = 2;
+  int butLen = 90;
+  int col = 5;
+  int hSpace = (HRES / 6);
+  int vSpace = 40;
+  int row = VRES - (vSpace * 1);
+  // Clear the screen
+  tft.fillScreen(TFT_BLACK);
+  drawButton(14,butLen,col,row,TFT_GREEN,"TurnTable");  // go to home page
+  col = col + hSpace;
+  drawButton(12,butLen,col,row,TFT_GREEN,"Settings");  // go to settings page
+  col = col + hSpace;
+  drawButton(18,butLen,col,row,TFT_GREEN,"Configuration"); // go to config page
+  col = col + hSpace;  
+  drawButton(13,butLen,col,row,TFT_GREEN,"Diagnostics"); // go to diagnostics page
+
+  butLen = 18;
+  col = 5;
+  row = 20;
+  int box = TrackBox;
+  char buttonText[12] = "";
+  // tft.setTextColor(TFT_BLUE);
+  tft.setTextDatum(MC_DATUM);  // Set text plotting reference datum to Middle Center 
+  tft.setTextPadding(tft.textWidth("99", 2)); // get the width of the text in pixels
+  // tft.setTextColor(TFT_WHITE);
+  for (int track = 1; track <= trackCount; track++) {
+    box = (TrackBox +(track*3));
+    row = (track % 10) * vSpace;
+    col = (HRES / 2) * (int)(track / 10);
+    // buttonText[12] = " "; 
+    strcat(buttonText, TrackTag[track]); strcat(buttonText," Fnt");
+    drawButton(box,butLen,col,row,TFT_BLUE,buttonText);  // track button
+    // buttonText[12] = " "; 
+    strcat(buttonText, TrackTag[track]); strcat(buttonText," Bck");
+    drawButton(box+1,butLen,col+20,row,TFT_YELLOW,buttonText);  // track button
+    if (Tracks[track].doorPresent) {
+    // buttonText[12] = " "; 
+      strcat(buttonText, TrackTag[track]); strcat(buttonText," Door");
+      drawButton(box+2,butLen,col+40,row,TFT_GREEN,buttonText);  // track button      
+    }
+    
+  }
+}
+
+
+void drawDiagnosticPage()
+{
+  activeScreen = 4;
+  int butLen = 90;
+  int col = 5;
+  int hSpace = (HRES / 4);
+  int vSpace = 40;
+  int row = VRES - (vSpace * 1);
+  // Clear the screen
+  tft.fillScreen(TFT_BLACK);
+  drawButton(14,butLen,col,row,TFT_GREEN,"TurnTable");  // go to home page
+  col = col + hSpace;
+  drawButton(12,butLen,col,row,TFT_GREEN,"Settings");  // go to settings page
+  col = col + hSpace;
+  drawButton(18,butLen,col,row,TFT_GREEN,"Configuration"); // go to config page
+
+  drawDiagnostics();
+  drawTrackMatrix();
+  tft.setCursor((HRES/2)+50, 0, 2);
+  listServos();
+  listReverences();
+}
+
+
+
+
+void drawDiagnostics()
+{
+  tft.setTextPadding(0); // reset to zero
+  tft.setTextDatum(TL_DATUM); // Top Left is datum
+   
+  tft.setCursor(0, 0, 2);
+  tft.print(F("LocoNet Turntable Control version ")); 
+  tft.println(VERSION);
+  
+  tft.print(F("Full Turn Steps = ")); 
+  tft.println(fullTurnSteps);
+  
+  tft.print(F("Last Track set = ")); 
+  tft.println(LastTrack);
+  
+  tft.print(F("Current Track is  ")); 
+  tft.print(TrackName[CurrentTrack]);
+  tft.print(F(" # "));
+  tft.print(CurrentTrack);
+  tft.print(F(" @ step  ")); 
+  tft.println(getCurrentPosition());
+  
+  tft.print(F("Home Track is  ")); 
+  tft.print(TrackName[homeTrack]);
+  tft.print(F(" # "));
+  tft.println(homeTrack);
+  
+  tft.print(F("Number of tracks set is  ")); 
+  tft.println(trackCount);  
+
+  tft.print(F("Number of reference points detected is  ")); 
+  tft.println(refCount);  
+  
+}
+
+void drawTrackMatrix()
+{
+  
+  tft.setTextDatum(TL_DATUM); // Top Left is datum
+  tft.println(F("Track Settings ")); 
+  tft.println(F("Address   Front   Back   Door Present   Door Servo")); 
+  tft.setCursor(5, tft.getCursorY()+10);
+  tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
+  for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
+  tft.setCursor(15, tft.getCursorY());
+  tft.print(Tracks[i].address );
+  tft.setCursor(70,tft.getCursorY());
+  tft.print(Tracks[i].trackFront);
+  tft.setCursor(140,tft.getCursorY());
+  tft.print(Tracks[i].trackBack);
+  tft.setCursor(210,tft.getCursorY());
+  tft.print(Tracks[i].doorPresent);
+  tft.setCursor(280,tft.getCursorY());
+  tft.println(Tracks[i].servoNumber);
+    }
+}
+
+void listServos()
+{
+  tft.setTextDatum(TL_DATUM); // Top Left is datum
+  tft.setCursor((HRES/2), tft.getCursorY());
+  tft.println(F("Servo Settings ")); 
+  tft.setCursor((HRES/2), tft.getCursorY());
+  tft.println(F("Address   Minimum   Maximum   Door position")); 
+  tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
+  // for (int i = 0; i < (sizeof(Servos) / sizeof(ServoAddress)); i++) {
+  // tft.setCursor((HRES/2)+15, tft.getCursorY());
+  // tft.print(Servos[i].address );
+  // tft.setCursor((HRES/2)+70,tft.getCursorY());
+  // tft.print(Servos[i].ServoMin);
+  // tft.setCursor((HRES/2)+140,tft.getCursorY());
+  // tft.print(Servos[i].ServoMax);
+  // tft.setCursor((HRES/2)+210,tft.getCursorY());
+  // tft.println(Servos[i].Position);
+  //   }
+}
+
+void listReverences()
+{
+  tft.setTextDatum(TL_DATUM); // Top Left is datum
+  tft.setCursor((HRES/2), tft.getCursorY()+10);
+  tft.println(F("Reference Points ")); 
+  tft.setCursor((HRES/2), tft.getCursorY());
+  tft.println(F("Number  Forward steps   Reverse steps")); 
+  tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
+  for (int i = 0; i < (sizeof(References) / sizeof(ReferenceStep)); i++) {
+  tft.setCursor((HRES/2)+25, tft.getCursorY());
+  tft.print(i);
+  tft.setCursor((HRES/2)+70,tft.getCursorY());
+  tft.print(References[i].stepsForward);
+  tft.setCursor((HRES/2)+180,tft.getCursorY());
+  tft.println(References[i].stepsReverse);
+    }
+}
+
+void drawTurnTable()
+{
+  int32_t xC = TT_CX, yC = TT_CY, rad = TT_RAD;
+  uint32_t  fg_color,  bg_color;
+  fg_color = TFT_WHITE;
+  bg_color = TFT_BLACK;
+
+  tft.fillCircle(TT_CX, TT_CY, (TT_RAD+(TT_S_SPACE*2)+TT_S_WIDTH + 5), TFT_BLACK);
+  // drawSmoothCircle(int32_t x, int32_t y, int32_t r, uint32_t fg_color, uint32_t bg_color);
+  tft.drawSmoothCircle(xC, yC, rad, fg_color,  bg_color);
+  // tft.drawCircle(xC, yC, rad+1, TFT_WHITE);
+
+  drawBridge((absPosition(getCurrentPosition())*360)/fullTurnSteps);
+}
+
+
+void drawBridge(float angle)
+{
+  angle = angle + TT_ROTATION - 180;
+
+int32_t xC = TT_CX, yC = TT_CY, offset = TT_B_WIDTH, side = TT_B_WIDTH*2;
+tft.fillCircle(TT_CX, TT_CY, (TT_RAD-2), TFT_BLACK);
+
+float length = TT_DIA - 25, width = TT_B_WIDTH;
+float CosAngle = - cos(angle*0.01745329252);
+float SineAngle = sin(angle*0.01745329252);
+float CPtBackX = xC - (CosAngle * length / 2);
+float CPtBackY = yC - (SineAngle * length / 2);
+float CPtFrontX = xC + (CosAngle * length / 2);
+float CPtFrontY = yC + (SineAngle * length / 2);
+
+float BPt1X = CPtBackX + (SineAngle * width / 2);
+float BPt1Y = CPtBackY - (CosAngle * width / 2);
+float BPt2X = CPtBackX - (SineAngle * width / 2);
+float BPt2Y = CPtBackY + (CosAngle * width / 2);
+float BPt3X = CPtFrontX - (SineAngle * width / 2);
+float BPt3Y = CPtFrontY + (CosAngle * width / 2);
+float BPt4X = CPtFrontX + (SineAngle * width / 2);
+float BPt4Y = CPtFrontY - (CosAngle * width / 2);
+
+setHotSpot8(1,BPt1X, BPt1Y, BPt2X, BPt2Y,BPt3X, BPt3Y, BPt4X, BPt4Y);
+// Draw an anti-aliased wide line from ax,ay to bx,by width wd with radiused ends (radius is wd/2)
+// If bg_color is not included the background pixel colour will be read from TFT or sprite
+//tft.drawWideLine(float ax, float ay, float bx, float by, float wd, uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF);
+// draw bridge ends
+tft.drawWideLine(BPt1X, BPt1Y, BPt2X, BPt2Y, 8, TFT_BLUE);
+tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 8, TFT_YELLOW);
+// draw bridge section
+length = TT_DIA - 40;
+ CPtBackX = xC - (CosAngle * length / 2);
+ CPtBackY = yC - (SineAngle * length / 2);
+ CPtFrontX = xC + (CosAngle * length / 2);
+ CPtFrontY = yC + (SineAngle * length / 2);
+
+ BPt1X = CPtBackX + (SineAngle * width / 2);
+ BPt1Y = CPtBackY - (CosAngle * width / 2);
+ BPt2X = CPtBackX - (SineAngle * width / 2);
+ BPt2Y = CPtBackY + (CosAngle * width / 2);
+ BPt3X = CPtFrontX - (SineAngle * width / 2);
+ BPt3Y = CPtFrontY + (CosAngle * width / 2);
+ BPt4X = CPtFrontX + (SineAngle * width / 2);
+ BPt4Y = CPtFrontY - (CosAngle * width / 2);
+tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, RailColor);
+tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, RailColor);
+
+float CPtShackX = BPt1X + (CosAngle * offset);
+float CPtShackY = BPt1Y + (SineAngle * offset);
+float SPt1X = CPtShackX + (SineAngle * side);
+float SPt1Y = CPtShackY - (CosAngle * side);
+float SPt2X = SPt1X + (CosAngle * side);
+float SPt2Y = SPt1Y + (SineAngle * side);
+float SPt3X = CPtShackX + (CosAngle * side);
+float SPt3Y = CPtShackY + (SineAngle * side);
+ 
+// draw bridge shack
+
+
+  drawShack((absPosition(getCurrentPosition())*360)/fullTurnSteps);
+
+// tft.drawWideLine(CPtShackX, CPtShackY, SPt1X, SPt1Y, 2, TFT_RED);
+// tft.drawWideLine(SPt1X, SPt1Y, SPt2X, SPt2Y, 2, TFT_RED);
+// tft.drawWideLine(SPt2X, SPt2Y, SPt3X, SPt3Y, 2, TFT_RED);
+// tft.drawWideLine(SPt3X,SPt3Y,CPtShackX, CPtShackY, 2, TFT_RED);
+// if (pixelsOn) tft.fillCircle((SPt1X+SPt3X)/2, (SPt1Y+SPt3Y)/2, TT_B_WIDTH/2, TFT_YELLOW);
+
+setHotSpot8(2,CPtShackX, CPtShackY, SPt1X, SPt1Y,SPt2X, SPt2Y, SPt3X, SPt3Y);
+
+
+tft.setTextDatum(ML_DATUM);  // Set text plotting reference datum to Middle Left 
+tft.setTextPadding(tft.textWidth("9999999999999999999999999", 2)); // get the width of the text in pixels
+tft.drawString(TrackName[CurrentTrack], 80, VRES/2, 2);  // draw the name of the track
+
+}
+
+void drawShack(float angle)
+{
+  angle = angle + TT_ROTATION - 180;
+
+int32_t xC = TT_CX, yC = TT_CY, offset = TT_B_WIDTH, side = TT_B_WIDTH*2;
+
+float length = TT_DIA - 40, width = TT_B_WIDTH;
+float CosAngle = - cos(angle*0.01745329252);
+float SineAngle = sin(angle*0.01745329252);
+float CPtBackX = xC - (CosAngle * length / 2);
+float CPtBackY = yC - (SineAngle * length / 2);
+float BPt1X = CPtBackX + (SineAngle * width / 2);
+float BPt1Y = CPtBackY - (CosAngle * width / 2);
+float CPtShackX = BPt1X + (CosAngle * offset);
+float CPtShackY = BPt1Y + (SineAngle * offset);
+float SPt1X = CPtShackX + (SineAngle * side);
+float SPt1Y = CPtShackY - (CosAngle * side);
+float SPt2X = SPt1X + (CosAngle * side);
+float SPt2Y = SPt1Y + (SineAngle * side);
+float SPt3X = CPtShackX + (CosAngle * side);
+float SPt3Y = CPtShackY + (SineAngle * side);
+ 
+// draw bridge shack
+tft.drawWideLine(CPtShackX, CPtShackY, SPt1X, SPt1Y, 2, TFT_RED);
+tft.drawWideLine(SPt1X, SPt1Y, SPt2X, SPt2Y, 2, TFT_RED);
+tft.drawWideLine(SPt2X, SPt2Y, SPt3X, SPt3Y, 2, TFT_RED);
+tft.drawWideLine(SPt3X,SPt3Y,CPtShackX, CPtShackY, 2, TFT_RED);
+if (pixelsOn) 
+  tft.fillCircle((SPt1X+SPt3X)/2, (SPt1Y+SPt3Y)/2, TT_B_WIDTH/2, TFT_YELLOW);
+  else
+  tft.fillCircle((SPt1X+SPt3X)/2, (SPt1Y+SPt3Y)/2, TT_B_WIDTH/2, TFT_BLACK);
+
+}
+
+void drawTracks()
+{
+  for (int i = 1; i <= trackCount; i++) {
+    drawTrack(i,((Tracks[i].trackFront*360)/fullTurnSteps));
+    // Serial.print(i);
+    // Serial.print("  ");
+    // Serial.print((Tracks[i].trackFront*360)/fullTurnSteps);
+    // Serial.print(" degrees ");
+    // Serial.print(Tracks[i].trackFront);
+    // Serial.println(" steps");
+  }
+}
+
+void drawTrack(int track, float angle)
+//------------------------------------------
+{
+  angle = angle + TT_ROTATION - 180;
+
+  int32_t xC = TT_CX, yC = TT_CY, offset = TT_S_SPACE;
+  int box = (TrackBox +(track*3));
+  float length = TT_DIA + TT_S_SPACE/2, width = TT_S_WIDTH;
+
+  float CosAngle = cos(angle*0.01745329252);
+  float SineAngle = - sin(angle*0.01745329252);
+
+
+  length = TT_DIA;
+  float CPtBackX = xC + (CosAngle * (length+(offset*0)) / 2);
+  float CPtBackY = yC + (SineAngle * (length+(offset*0)) / 2);
+
+  float BPt1X = CPtBackX + (SineAngle * width / 2);
+  float BPt1Y = CPtBackY - (CosAngle * width / 2);
+  float BPt2X = CPtBackX - (SineAngle * width / 2);
+  float BPt2Y = CPtBackY + (CosAngle * width / 2);
+
+  float CPtFrontX = xC + (CosAngle * (length+(offset*4)) / 2);
+  float CPtFrontY = yC + (SineAngle * (length+(offset*4)) / 2);
+
+  float BPt3X = CPtFrontX - (SineAngle * width / 2);
+  float BPt3Y = CPtFrontY + (CosAngle * width / 2);
+  float BPt4X = CPtFrontX + (SineAngle * width / 2);
+  float BPt4Y = CPtFrontY - (CosAngle * width / 2);
+
+  tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, RailColor);
+  tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, RailColor);
+
+  float CPtMidX = xC + (CosAngle * (length+(offset*.6)) / 2);
+  float CPtMidY = yC + (SineAngle * (length+(offset*.6)) / 2);
+
+  // tft.setTextColor(TFT_BLUE);
+  tft.setTextDatum(MC_DATUM);  // Set text plotting reference datum to Middle Center 
+  tft.setTextPadding(tft.textWidth("99", 2)); // get the width of the text in pixels
+  tft.drawString(TrackTag[track], CPtMidX, CPtMidY, 2);  // draw the short name of the track
+  // tft.setTextColor(TFT_WHITE);
+
+  // front position button (blue)
+  length = TT_DIA +(offset*1.4);
+
+  CPtFrontX = xC + (CosAngle * length / 2);
+  CPtFrontY = yC + (SineAngle * length / 2);
+
+  BPt3X = CPtFrontX - (SineAngle * width / 2);
+  BPt3Y = CPtFrontY + (CosAngle * width / 2);
+  BPt4X = CPtFrontX + (SineAngle * width / 2);
+  BPt4Y = CPtFrontY - (CosAngle * width / 2);
+  tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_BLUE);
+  setHotSpot8(box, BPt3X, BPt3Y, BPt4X, BPt4Y, BPt3X, BPt3Y, BPt4X, BPt4Y);
+
+  // back position button (yellow)
+  length = TT_DIA +(offset*2.7);
+  CPtFrontX = xC + (CosAngle * (length) / 2);
+  CPtFrontY = yC + (SineAngle * (length) / 2);
+
+  BPt3X = CPtFrontX - (SineAngle * width / 2);
+  BPt3Y = CPtFrontY + (CosAngle * width / 2);
+  BPt4X = CPtFrontX + (SineAngle * width / 2);
+  BPt4Y = CPtFrontY - (CosAngle * width / 2);
+  tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_YELLOW);
+  setHotSpot8(box+1, BPt3X, BPt3Y, BPt4X, BPt4Y, BPt3X, BPt3Y, BPt4X, BPt4Y);
+
+  // door position button (state determined)
+  length = TT_DIA +(offset*4);
+  if (Tracks[track].doorPresent) {
+    CPtFrontX = xC + (CosAngle * (length) / 2);
+    CPtFrontY = yC + (SineAngle * (length) / 2);
+    BPt3X = CPtFrontX - (SineAngle * width / 2);
+    BPt3Y = CPtFrontY + (CosAngle * width / 2);
+    BPt4X = CPtFrontX + (SineAngle * width / 2);
+    BPt4Y = CPtFrontY - (CosAngle * width / 2);
+
+// need to integrate with door state determined by events consumed from other node
+
+    // if (Servos[Tracks[track].servoNumber].Status)
+    //     {
+    //     tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_GREEN);
+    //     }
+    //     else  
+        {
+        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_RED); 
+        } 
+    setHotSpot8(box+2, BPt3X, BPt3Y, BPt4X, BPt4Y, BPt3X, BPt3Y, BPt4X, BPt4Y);
+  }
+// else tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_BLACK); 
+
+
+}
+
+void setHotSpot(int box, int X1, int Y1, int X2, int Y2)
+{ // sets a hotspot given two opposing points
+  HotBoxes[box].screen = activeScreen;
+  if (X1<X2)
+  {
+    HotBoxes[box].X1 = X1-T_FRINGE;
+    HotBoxes[box].X2 = X2+T_FRINGE;
+  }
+  else
+  {
+    HotBoxes[box].X1 = X2-T_FRINGE;
+    HotBoxes[box].X2 = X1+T_FRINGE;
+  }
+  if (Y1<Y2)
+  {
+    HotBoxes[box].Y1 = Y1-T_FRINGE;
+    HotBoxes[box].Y2 = Y2+T_FRINGE;
+  }
+  else
+  {
+    HotBoxes[box].Y1 = Y2-T_FRINGE;
+    HotBoxes[box].Y2 = Y1+T_FRINGE;
+  }
+}
+
+void setHotSpot8(int box, int X1, int Y1, int X2, int Y2, int X3, int Y3, int X4, int Y4)
+{ // sets a hotspot for a screen rectangle that encloses four points
+  int tol = T_FRINGE;  
+  
+    // Serial.print("Box: ");
+    // Serial.println(box);
+
+  HotBoxes[box].screen = activeScreen;
+  if ((X1<=X2) && (X1<=X3) && (X1<=X4))
+  {
+    HotBoxes[box].X1 = X1 - tol;
+  }
+  else if ((X2<=X1) && (X2<=X3) && (X2<=X4)) {
+    HotBoxes[box].X1 = X2 - tol;
+    }
+    else if ((X3<=X1) && (X3<=X2) && (X3<=X4)) {
+      HotBoxes[box].X1 = X3 + tol;
+      }
+      else{
+      HotBoxes[box].X1 = X4 - tol;
+      }
+
+  if ((Y1<=Y2) && (Y1<=Y3) && (Y1<=Y4))
+  {
+    HotBoxes[box].Y1 = Y1 - tol;
+  }
+  else if ((Y2<=Y1) && (Y2<=Y3) && (Y2<=Y4)) {
+    HotBoxes[box].Y1 = Y2 - tol;
+    }
+    else if ((Y3<=Y1) && (Y3<=Y2) && (Y3<=Y4)) {
+      HotBoxes[box].Y1 = Y3 - tol;
+      }
+      else{
+      HotBoxes[box].Y1 = Y4 - tol;
+      }
+    
+  if ((X1>=X2) && (X1>=X3) && (X1>=X4))
+  {
+    HotBoxes[box].X2 = X1 + tol;
+  }
+  else if ((X2>=X1) && (X2>=X3) && (X2>=X4)) {
+    HotBoxes[box].X2 = X2 + tol;
+    }
+    else if ((X3>=X1) && (X3>=X2) && (X3>=X4)) {
+      HotBoxes[box].X2 = X3 + tol;
+      }
+      else{
+      HotBoxes[box].X2 = X4 + tol;
+      }
+    
+  if ((Y1>=Y2) && (Y1>=Y3) && (Y1>=Y4))
+  {
+    HotBoxes[box].Y2 = Y1 + tol;
+  }
+  else if ((Y2>=Y1) && (Y2>=Y3) && (Y2>=Y4)) {
+    HotBoxes[box].Y2 = Y2 + tol;
+    }
+    else if ((Y3>=Y1) && (Y3>=Y2) && (Y3>=Y4)) {
+      HotBoxes[box].Y2 = Y3 + tol;
+      }
+      else{
+      HotBoxes[box].Y2 = Y4 + tol;
+      }
+    
+}
+
+// typedef struct _fttouchinfo
+// {
+//   int count;
+//   uint16_t x[5], y[5];
+//   uint8_t pressure[5], area[5];
+// } TOUCHINFO;
+
+void touchIO()
+{
+  // tp.read();
+  if (tp.getSamples(&ti)) // Note this function updates coordinates stored within library variables
+  {
+    int tc = ti.count;
+    read_started_ms = millis();      
+    _changed = false;  // Debounce time has not ellapsed.
+    if (read_started_ms - _last_change > _db_time)          // Debounce time ellapsed.
+    {
+      _last_state = _current_state;				// Save last state.
+      _current_state = ti;					// Assign new state as current state .
+      if (!(_current_state.x[0] == _last_state.x[0])) {_changed = true;};
+      if (!(_current_state.y[0] == _last_state.y[0])) {_changed = true;};
+      if (_changed) {           // State changed.
+        //   Serial.println(' ');
+        // Serial.print(" changed   ");  
+        _last_change = read_started_ms;        // Save current millis as last change time.
+        X_Coord = ti.x[0];
+        Y_Coord = ti.y[0];       
+        // rotatePoints(ti.x[0],ti.y[0]);
+        #ifdef TT2_DEBUG 
+        //   for (int i=0; i<ti.count; i++){ // for each touch point
+            int i = ti.count;
+            Serial.print("Count : ");Serial.print(i);
+            i = 0;
+            Serial.print("Touch ");Serial.print(i+1);Serial.print(": ");
+            Serial.print("  x: ");Serial.print(ti.x[i]);
+            Serial.print("  y: ");Serial.print(ti.y[i]);
+            Serial.print("  pressure: ");Serial.print(ti.pressure[i]);
+            Serial.print("  area: ");Serial.println(ti.area[i]);
+            drawCross(X_Coord, Y_Coord, TFT_GREEN);  // for debugging, comment out to clean up screen in usage
+          // } 
+        #endif
+        
+
+        int boxCode = HotSpotBox(X_Coord,Y_Coord); 
+
+        #ifdef TT2_DEBUG 
+          Serial.print(F("DEBUG: box code: "));
+          Serial.println(boxCode);
+          Serial.print(F("DEBUG: active screen: "));
+          Serial.println(activeScreen);
+        #endif
+
+        touchCommand(boxCode);
+      }
+    }  
+  }
+}
+
+void drawCross(int x, int y, unsigned int color)
+{ 
+    // for debugging, comment out to clean up screen in usage
+
+  tft.drawLine(x - 3, y, x + 3, y, color);
+  tft.drawLine(x, y - 3, x, y + 3, color);
+}
+
+void rotatePoints(int x, int y)
+{
+  switch (1){
+    case 0:
+      X_Coord = HRES - y;
+      Y_Coord = x;
+      break;
+    case 1:
+      X_Coord = x;
+      Y_Coord = y;
+      break;
+    case 2:
+      X_Coord = y;
+      Y_Coord = VRES - x;
+      break;
+    case 3:
+      X_Coord = HRES - x;
+      Y_Coord = VRES - y;
+      break;
+    default:
+      X_Coord = x;
+      Y_Coord = y;
+      break;
+  }
+}
+int HotSpotBox(int X, int Y)
+{int retcode = 0;
+          Serial.print("  x: ");Serial.print(X);
+          Serial.print("  y: ");Serial.print(Y);
+          Serial.println(' ');           
+  if ((X>0) && (Y>0)) {
+    for (int i = 0; i < (sizeof(HotBoxes) / sizeof(HotBox)); i++) {
+      if ((HotBoxes[i].screen == activeScreen) && (HotBoxes[i].X1 <= X) && (X <= HotBoxes[i].X2) && (HotBoxes[i].Y1 <= Y) && (Y <= HotBoxes[i].Y2 ))
+      {
+        retcode = i;
+        #ifdef TT2_DEBUG             
+          Serial.print("Box ");Serial.print(i);Serial.print(" screen: ");Serial.print(HotBoxes[i].screen);
+          Serial.print("  x1: ");Serial.print(HotBoxes[i].X1);
+          Serial.print("  y1: ");Serial.print(HotBoxes[i].Y1);
+          Serial.print("  x2: ");Serial.print(HotBoxes[i].X2);
+          Serial.print("  y2: ");Serial.print(HotBoxes[i].Y2);
+          Serial.println(' ');  
+        #endif 
+      }
+    }
+  }
+  return retcode;
+}
+
+void TurnOnPixels()   // turn on the pixels
+{
+    for (int i = 0; i < PixelCount; i++) {     
+    strip.neoPixelSetValue(i, 255,255,255,false); 
+    }
+    strip.neoPixelShow();
+    pixelsOn = true;
+    Serial.println("On ...");
+}
+void TurnOffPixels()      // turn off the pixels
+{
+    for (int i = 0; i < PixelCount; i++) {     
+    strip.neoPixelSetValue(i,0,0,0,false); 
+    }
+    strip.neoPixelShow();
+    pixelsOn = false;
+}
+
+void TogglePixels()   // toggle the pixels
+{
+  uint8_t SetRed = RedLevel;
+  uint8_t SetBlue = BlueLevel;
+  uint8_t SetGreen = GreenLevel;
+  if (pixelsOn) { 
+    SetRed = 0;
+    SetBlue = 0;
+    SetGreen = 0;
+    pixelsOn = false;
+    Serial.println("Off ...");
+    }
+    else {
+      pixelsOn = true;
+    Serial.println("On ...");
+    }
+  for (int i = 0; i < PixelCount; i++) { 
+     strip.neoPixelSetValue(i, SetRed,SetGreen,SetBlue,false);
+     }    
+  strip.neoPixelShow();
+}
+
+void DimmerHigh()      // set to higher intensity
+{
+uint8_t luminance;
+  // DimON = false;
+  // luminance = _HighLuminosity;
+  // strip.SetLuminance(luminance); // requires different neopixel library
+  // strip.Show();
+  Serial.println("All Bright ...");
+}
+void DimmerLow()      // dim intensity
+{
+uint8_t luminance; 
+  // DimON = true;
+  // luminance = _LowLuminosity;
+  // strip.SetLuminance(luminance); // requires different neopixel library
+  // strip.Show();        
+  Serial.println("All Dim ...");
+}

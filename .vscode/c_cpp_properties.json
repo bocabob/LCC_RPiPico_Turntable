@@ -1,0 +1,23 @@
+{
+    "configurations": [
+        {
+            "name": "Win32",
+            "includePath": [
+                "${workspaceRoot}/src/**",
+                "${workspaceFolder}/**",
+                "C:/GdriveBG/Arduino/libraries/**",
+                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/**"
+            ],
+            "defines": [
+                "_DEBUG",
+                "UNICODE",
+                "_UNICODE"
+            ],
+            // "compilerPath": "C:\\Program Files\\Arduino IDE\\Arduino IDE.exe",
+            "cStandard": "c11",
+            "cppStandard": "c++17",
+            "intelliSenseMode": "clang-x64"
+        }
+    ],
+    "version": 4
+}
