@@ -24,7 +24,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  *
- * \file dependency_injectors.c
+ * \file callbacks.cpp
  *
  *
  * @author Jim Kueneman
@@ -33,9 +33,9 @@
 
 #include "callbacks.h"
 #include "config_mem_helper.h"
-#include "node_parameters.h"
+#include "openlcb_user_config.h"
 #include "BoardSettings.h"
-#include "src/application_drivers/rpi_pico_drivers.h"
+#include "src/pico/rpi_pico_drivers.h"
 #include "src/openlcb/openlcb_application_broadcast_time.h"
 
 #include "Arduino.h"
@@ -278,7 +278,7 @@ void Callbacks_alias_change_callback(uint16_t new_alias, node_id_t node_id) {
 void Callbacks_operations_request_factory_reset(openlcb_statemachine_info_t *statemachine_info, config_mem_operations_request_info_t *config_mem_operations_request_info) {
 
   ConfigMemHelper_clear_config_mem();
-  ConfigMemHelper_reset_and_write_default(NodeParameters_node_id);
+  ConfigMemHelper_reset_and_write_default(OpenLcbUserConfig_node_id);
 
   printf("Factory Reset: NodeID = 0x%06llX\n", OpenLcbUtilities_extract_node_id_from_openlcb_payload(statemachine_info->incoming_msg_info.msg_ptr, 0));
 }
@@ -379,6 +379,6 @@ bool Callbacks_on_login_complete(openlcb_node_t *openlcb_node) {
   
   OpenLcbApplicationBroadcastTime_start(BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
 
-  return OpenLcbApplicationBroadcastTime_send_query(NodeParameters_node_id, BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
+  return OpenLcbApplicationBroadcastTime_send_query(OpenLcbUserConfig_node_id, BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
   
 }

@@ -65,7 +65,7 @@ typedef struct
   int servoNumber;
 }
 TrackAddress;
-extern TrackAddress Tracks[MAX_TRACKS];
+// extern TrackAddress Tracks[MAX_TRACKS];
 
 const char TrackName[MAX_TRACKS][25]=
 {

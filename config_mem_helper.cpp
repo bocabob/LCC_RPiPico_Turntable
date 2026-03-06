@@ -11,13 +11,13 @@
 
 #include "Arduino.h"
 #include <LibPrintf.h>
+#include "config_mem_helper.h"
+#include "openlcb_user_config.h"
+#include "src/openlcb/openlcb_application.h"
+#include "src/pico/rpi_pico_drivers.h"
+#include "src/utilities/mustangpeak_endian_helper.h"
 #include <string.h>
 #include <stdio.h>
-#include "config_mem_helper.h"
-#include "node_parameters.h"
-#include "src/openlcb/openlcb_application.h"
-#include "src/application_drivers/rpi_pico_drivers.h"
-#include "src/utilities/mustangpeak_endian_helper.h"
 
 #include "TTvariables.h"
 
@@ -42,7 +42,7 @@ static void _load_defaults_node(openlcb_node_t *openlcb_node, config_mem_t *conf
 
   const char *name_def = "Southern Piedmont";
   strncpy(config->nodeid.node_name, name_def, sizeof(config->nodeid.node_name)); // Will pad with nulls
-  const char *descript_def = "NeoPixel Controller Node";
+  const char *descript_def = "Turntable Controller Node";
   strncpy(config->nodeid.node_description, descript_def, sizeof(config->nodeid.node_description)); // Will pad with nulls
 
 }
@@ -58,6 +58,7 @@ static void _load_defaults_attributes(openlcb_node_t *openlcb_node, config_mem_t
   config->attributes.TrackCount = NUM_TRACKS;
   config->attributes.HomeTrack = 3; // Default home track is track 4 (0 indexed)
   config->attributes.ReferenceCount = false; // Disable reference correction by default
+  config->attributes.FullTurnSteps = swap_endian32(FULL_TURN_STEPS); // number of steps in a full turn of the turntable, needs to be in little endian for the OpenLcbLib functions to write it correctly to memory and have it be correct when read back on a big endian system
   config->attributes.Rehome = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++;// EventID for rehome
   config->attributes.IncrementTrack = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for increment track
   config->attributes.DecrementTrack = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for decrement track
@@ -73,20 +74,20 @@ static void _load_defaults_attributes(openlcb_node_t *openlcb_node, config_mem_t
     config->attributes.tracks[t].RailCom = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for track railcom
     config->attributes.tracks[t].steps = 0; // Default position in steps for each track
   }
-    config->attributes.tracks[1].steps = absPosition(entryTrack1); // Default position in steps for each track
-    config->attributes.tracks[2].steps = absPosition(entryTrack2); // Default position in steps for each track
-    config->attributes.tracks[3].steps = absPosition(entryTrack3); // Default position in steps for each track
-    config->attributes.tracks[4].steps = absPosition(houseTrack1); // Default position in steps for each track
-    config->attributes.tracks[5].steps = absPosition(houseTrack2); // Default position in steps for each track
-    config->attributes.tracks[6].steps = absPosition(houseTrack3); // Default position in steps for each track
-    config->attributes.tracks[7].steps = absPosition(houseTrack4); // Default position in steps for each track
-    config->attributes.tracks[8].steps = absPosition(houseTrack5); // Default position in steps for each track
-    config->attributes.tracks[9].steps = absPosition(houseTrack6); // Default position in steps for each track
-    config->attributes.tracks[10].steps = absPosition(houseTrack7); // Default position in steps for each track
-    config->attributes.tracks[11].steps = absPosition(houseTrack8); // Default position in steps for each track
-    config->attributes.tracks[12].steps = absPosition(houseTrack9); // Default position in steps for each track
-    config->attributes.tracks[13].steps = absPosition(houseTrack10); // Default position in steps for each track
-    config->attributes.tracks[14].steps = absPosition(houseTrack11); //
+    config->attributes.tracks[1].steps = swap_endian32(absPosition(entryTrack1)); // Default position in steps for each track
+    config->attributes.tracks[2].steps = swap_endian32(absPosition(entryTrack2)); // Default position in steps for each track
+    config->attributes.tracks[3].steps = swap_endian32(absPosition(entryTrack3)); // Default position in steps for each track
+    config->attributes.tracks[4].steps = swap_endian32(absPosition(houseTrack1)); // Default position in steps for each track
+    config->attributes.tracks[5].steps = swap_endian32(absPosition(houseTrack2)); // Default position in steps for each track
+    config->attributes.tracks[6].steps = swap_endian32(absPosition(houseTrack3)); // Default position in steps for each track
+    config->attributes.tracks[7].steps = swap_endian32(absPosition(houseTrack4)); // Default position in steps for each track
+    config->attributes.tracks[8].steps = swap_endian32(absPosition(houseTrack5)); // Default position in steps for each track
+    config->attributes.tracks[9].steps = swap_endian32(absPosition(houseTrack6)); // Default position in steps for each track
+    config->attributes.tracks[10].steps = swap_endian32(absPosition(houseTrack7)); // Default position in steps for each track
+    config->attributes.tracks[11].steps = swap_endian32(absPosition(houseTrack8)); // Default position in steps for each track
+    config->attributes.tracks[12].steps = swap_endian32(absPosition(houseTrack9)); // Default position in steps for each track
+    config->attributes.tracks[13].steps = swap_endian32(absPosition(houseTrack10)); // Default position in steps for each track
+    config->attributes.tracks[14].steps = swap_endian32(absPosition(houseTrack11)); //
 
   config->attributes.DoorCount = NUM_DOORS;
   config->attributes.OpenAll = swap_endian64((openlcb_node->id << 16) + *producer_index); (*producer_index)++; // EventID for open all doors
@@ -469,9 +470,9 @@ void writeTracks()
       Serial.println(trackCount);
   #endif
 
-  for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
-  ConfigMemHelper_config_data.Tracks[i] = Tracks[i];
-  }
+  // for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
+  // ConfigMemHelper_config_data.Tracks[i] = Tracks[i];
+  // }
   
   rp2040.resumeOtherCore();
 }
@@ -493,9 +494,9 @@ void getTracks()
       Serial.println(trackCount);
   #endif
 
-  for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
-  Tracks[i] = ConfigMemHelper_config_data.Tracks[i];
-  }
+  // for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
+  // Tracks[i] = ConfigMemHelper_config_data.Tracks[i];
+  // }
   rp2040.resumeOtherCore();
 }
 

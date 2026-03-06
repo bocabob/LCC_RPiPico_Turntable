@@ -28,7 +28,13 @@
 #include "src/application_drivers/my_bb_captouch.h"
 #include <cstring>
 #include "mdebugging.h"
+#include "src/drivers/canbus/can_types.h"
+#include "config_mem_helper.h"
 
+
+extern openlcb_node_t *OpenLcbUserConfig_node_id;
+
+extern config_mem_t ConfigMemHelper_config_data;
 
 // extern AccelStepper stepper;
 
@@ -150,13 +156,13 @@ void TurntableCallback(uint16_t callin) {
     }
       
       // toggle door to track w/redraw
-      if (Tracks[track].doorPresent) 
+      if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
         // if (Servos[Tracks[track].servoNumber].Status)
-        // {              MoveServo(Tracks[track].servoNumber, 0);            }
+        // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            }
         // else
-        // {              MoveServo(Tracks[track].servoNumber, 32);            }
-        drawTrack(track,((Tracks[track].trackFront*360)/fullTurnSteps));
+        // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            }
+        drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
       }
   }
   else {    
@@ -380,7 +386,7 @@ void drawButtonPage()
     // buttonText[12] = " "; 
     strcat(buttonText, TrackTag[track]); strcat(buttonText," Bck");
     drawButton(box+1,butLen,col+20,row,TFT_YELLOW,buttonText);  // track button
-    if (Tracks[track].doorPresent) {
+    if (ConfigMemHelper_config_data.Tracks[track].doorPresent) {
     // buttonText[12] = " "; 
       strcat(buttonText, TrackTag[track]); strcat(buttonText," Door");
       drawButton(box+2,butLen,col+40,row,TFT_GREEN,buttonText);  // track button      
@@ -459,17 +465,17 @@ void drawTrackMatrix()
   tft.println(F("Address   Front   Back   Door Present   Door Servo")); 
   tft.setCursor(5, tft.getCursorY()+10);
   tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
-  for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
+  for (int i = 0; i < (sizeof(ConfigMemHelper_config_data.Tracks) / sizeof(TrackAddress)); i++) {
   tft.setCursor(15, tft.getCursorY());
-  tft.print(Tracks[i].address );
+  tft.print(ConfigMemHelper_config_data.Tracks[i].address );
   tft.setCursor(70,tft.getCursorY());
-  tft.print(Tracks[i].trackFront);
+  tft.print(ConfigMemHelper_config_data.Tracks[i].trackFront);
   tft.setCursor(140,tft.getCursorY());
-  tft.print(Tracks[i].trackBack);
+  tft.print(ConfigMemHelper_config_data.Tracks[i].trackBack);
   tft.setCursor(210,tft.getCursorY());
-  tft.print(Tracks[i].doorPresent);
+  tft.print(ConfigMemHelper_config_data.Tracks[i].doorPresent);
   tft.setCursor(280,tft.getCursorY());
-  tft.println(Tracks[i].servoNumber);
+  tft.println(ConfigMemHelper_config_data.Tracks[i].servoNumber);
     }
 }
 
@@ -642,12 +648,12 @@ if (pixelsOn)
 void drawTracks()
 {
   for (int i = 1; i <= trackCount; i++) {
-    drawTrack(i,((Tracks[i].trackFront*360)/fullTurnSteps));
+    drawTrack(i,((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
     // Serial.print(i);
     // Serial.print("  ");
-    // Serial.print((Tracks[i].trackFront*360)/fullTurnSteps);
+    // Serial.print((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps);
     // Serial.print(" degrees ");
-    // Serial.print(Tracks[i].trackFront);
+    // Serial.print(ConfigMemHelper_config_data.Tracks[i].trackFront);
     // Serial.println(" steps");
   }
 }
@@ -721,7 +727,7 @@ void drawTrack(int track, float angle)
 
   // door position button (state determined)
   length = TT_DIA +(offset*4);
-  if (Tracks[track].doorPresent) {
+  if (ConfigMemHelper_config_data.Tracks[track].doorPresent) {
     CPtFrontX = xC + (CosAngle * (length) / 2);
     CPtFrontY = yC + (SineAngle * (length) / 2);
     BPt3X = CPtFrontX - (SineAngle * width / 2);

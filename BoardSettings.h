@@ -29,8 +29,8 @@
 // -------------------------------------------
 // Select ONE of these for Configuration Memory Size
 // --------------------------------------------
-//#define CONFIG_MEM_SIZE      65536
-#define CONFIG_MEM_SIZE      32768
+#define CONFIG_MEM_SIZE      65536
+// #define CONFIG_MEM_SIZE      32768
 //#define CONFIG_MEM_SIZE      16384
 //#define CONFIG_MEM_SIZE      8192
 //#define CONFIG_MEM_SIZE      4096
@@ -42,8 +42,8 @@
 // --------------------------------------------
 
 // Define the size of the EEPROM chip or use 4096 if using emulated internal flash storage
-// #define I2C_DEVICESIZE      65536  // 24LC512
-#define I2C_DEVICESIZE      32768  // 24LC256
+#define I2C_DEVICESIZE      65536  // 24LC512
+// #define I2C_DEVICESIZE      32768  // 24LC256
 // #define I2C_DEVICESIZE      16384  // 24LC128
 // #define I2C_DEVICESIZE       8192  // 24LC64
 // #define I2C_DEVICESIZE       4096  // 24LC32    // this is the size to use for internal FLASH EEPROM emulation
@@ -66,8 +66,8 @@
 
 #define I2C_SDA  26           // pin to use
 #define I2C_SCL  27           // pin to use
-#define I2C2_SDA  4           // pin to use
-#define I2C2_SCL  5           // pin to use
+// #define I2C2_SDA  4           // pin to use
+// #define I2C2_SCL  5           // pin to use
 
 #define TOUCH_SDA  4
 #define TOUCH_SCL  5

@@ -14,6 +14,6 @@
 // Main node parameters instance
 extern const node_parameters_t NodeParameters_main_node;
 
-extern openlcb_node_t *NodeParameters_node_id;
+extern openlcb_node_t *OpenLcbUserConfig_node_id;
 
 #endif // NODE_PARAMETERS_H

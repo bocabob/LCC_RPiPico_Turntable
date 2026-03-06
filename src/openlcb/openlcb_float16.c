@@ -25,10 +25,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  * @file openlcb_float16.c
- * @brief IEEE 754 half-precision (float16) conversion utilities
+ * @brief IEEE 754 half-precision (float16) conversion utilities.
+ *
+ * @details Converts between 32-bit IEEE 754 single-precision floats and
+ * 16-bit half-precision representations.  Handles subnormals, overflow to
+ * infinity, and rounding via bit manipulation of the raw float pattern.
  *
  * @author Jim Kueneman
- * @date 17 Feb 2026
+ * @date 4 Mar 2026
  */
 
 #include "openlcb_float16.h"
@@ -36,6 +40,7 @@
 #include <string.h>
 
 
+    /** @brief Reinterprets a float as its raw uint32_t bit pattern. */
 static uint32_t _float_to_bits(float f) {
 
     uint32_t bits;
@@ -46,6 +51,7 @@ static uint32_t _float_to_bits(float f) {
 
 }
 
+    /** @brief Reinterprets a raw uint32_t bit pattern as a float. */
 static float _bits_to_float(uint32_t bits) {
 
     float f;
@@ -57,6 +63,23 @@ static float _bits_to_float(uint32_t bits) {
 }
 
 
+    /**
+    * @brief Converts a 32-bit float to a float16 bit pattern.
+    *
+    * @details Algorithm:
+    * -# Extract sign, exponent, mantissa from IEEE 754 single
+    * -# Handle special cases: zero, NaN, infinity
+    * -# Clamp overflow to max finite half value
+    * -# Normal range: rebias exponent, truncate mantissa
+    * -# Subnormal: shift mantissa into denormalized form
+    * -# Underflow: flush to signed zero
+    *
+    * @verbatim
+    * @param value 32-bit float to convert
+    * @endverbatim
+    *
+    * @return 16-bit float16 bit pattern
+    */
 uint16_t OpenLcbFloat16_from_float(float value) {
 
     uint32_t fbits = _float_to_bits(value);
@@ -123,6 +146,20 @@ uint16_t OpenLcbFloat16_from_float(float value) {
 }
 
 
+    /**
+    * @brief Converts a float16 bit pattern to a 32-bit float.
+    *
+    * @details Algorithm:
+    * -# Extract sign, exponent, mantissa from half-precision fields
+    * -# Handle zero, subnormal (normalize), infinity/NaN, and normal cases
+    * -# Rebias exponent and expand mantissa to single-precision format
+    *
+    * @verbatim
+    * @param half 16-bit float16 bit pattern
+    * @endverbatim
+    *
+    * @return 32-bit float
+    */
 float OpenLcbFloat16_to_float(uint16_t half) {
 
     uint32_t sign = ((uint32_t) half & 0x8000) << 16;
@@ -176,6 +213,7 @@ float OpenLcbFloat16_to_float(uint16_t half) {
 }
 
 
+    /** @brief Flips the sign/direction bit of a float16 value. */
 uint16_t OpenLcbFloat16_negate(uint16_t half) {
 
     return half ^ FLOAT16_SIGN_MASK;
@@ -183,6 +221,7 @@ uint16_t OpenLcbFloat16_negate(uint16_t half) {
 }
 
 
+    /** @brief Returns true if the float16 bit pattern represents NaN. */
 bool OpenLcbFloat16_is_nan(uint16_t half) {
 
     uint16_t exp = half & FLOAT16_EXPONENT_MASK;
@@ -193,6 +232,7 @@ bool OpenLcbFloat16_is_nan(uint16_t half) {
 }
 
 
+    /** @brief Returns true if the float16 bit pattern represents positive or negative zero. */
 bool OpenLcbFloat16_is_zero(uint16_t half) {
 
     return (half & 0x7FFF) == 0;
@@ -200,6 +240,7 @@ bool OpenLcbFloat16_is_zero(uint16_t half) {
 }
 
 
+    /** @brief Encodes a speed magnitude and direction into a float16 bit pattern. */
 uint16_t OpenLcbFloat16_speed_with_direction(float speed, bool reverse) {
 
     // Ensure speed is non-negative for conversion
@@ -225,6 +266,7 @@ uint16_t OpenLcbFloat16_speed_with_direction(float speed, bool reverse) {
 }
 
 
+    /** @brief Returns the speed magnitude from a float16 bit pattern (ignores direction). */
 float OpenLcbFloat16_get_speed(uint16_t half) {
 
     // Clear sign bit to get absolute speed
@@ -235,6 +277,7 @@ float OpenLcbFloat16_get_speed(uint16_t half) {
 }
 
 
+    /** @brief Returns true if the direction bit is set (reverse). */
 bool OpenLcbFloat16_get_direction(uint16_t half) {
 
     return (half & FLOAT16_SIGN_MASK) != 0;

@@ -25,9 +25,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  * @file can_rx_message_handler.c
- * @brief Implementation of message handlers for CAN receive operations
+ * @brief Implementation of message handlers for CAN receive operations.
+ *
+ * @details Handles multi-frame assembly (first/middle/last), single-frame
+ * messages, legacy SNIP, and all CAN control frames (CID, RID, AMD, AME, AMR).
+ * Also manages duplicate alias detection and listener alias table updates.
+ * Invoked by the CAN Rx state machine via dependency-injected callbacks.
+ *
  * @author Jim Kueneman
- * @date 17 Jan 2026
+ * @date 4 Mar 2026
  */
 
 #include "can_rx_message_handler.h"
@@ -49,31 +55,13 @@
 #include "../../openlcb/openlcb_buffer_list.h"
 #include "../../openlcb/openlcb_utilities.h"
 
+    /** @brief Multi-frame assembly timeout in 100ms ticks (3 seconds). */
+#define CAN_RX_INPROCESS_TIMEOUT_TICKS 30
 
+/** @brief Saved pointer to the dependency-injected receive message handler interface. */
 static interface_can_rx_message_handler_t *_interface;
 
-    /**
-     * @brief Initializes the CAN Receive Message Handler module
-     *
-     * @details Algorithm:
-     * -# Store pointer to dependency injection interface in static variable
-     * -# Interface remains valid for lifetime of application
-     *
-     * Use cases:
-     * - Application startup sequence
-     * - System initialization before CAN reception begins
-     *
-     * @verbatim
-     * @param interface_can_frame_message_handler Pointer to interface structure containing required function pointers
-     * @endverbatim
-     *
-     * @warning Must be called exactly once during initialization
-     * @warning NOT thread-safe
-     *
-     * @attention Call before any CAN frames are processed
-     *
-     * @see interface_can_rx_message_handler_t - Interface structure definition
-     */
+    /** @brief Stores the dependency-injection interface pointer. */
 void CanRxMessageHandler_initialize(const interface_can_rx_message_handler_t *interface_can_frame_message_handler) {
 
     _interface = (interface_can_rx_message_handler_t*) interface_can_frame_message_handler;
@@ -81,38 +69,23 @@ void CanRxMessageHandler_initialize(const interface_can_rx_message_handler_t *in
 }
 
     /**
-     * @brief Builds a datagram rejected reply message for out-of-order frames
+     * @brief Builds and queues a Datagram Rejected or Optional Interaction Rejected reply.
      *
      * @details Algorithm:
-     * -# Allocate CAN message buffer from store
-     * -# Return early if allocation fails (silently drop)
-     * -# Build OpenLCB Datagram Rejected message:
-     *    - Set source alias from dest_alias parameter
-     *    - Set destination alias from source_alias parameter
-     *    - Set MTI to MTI_DATAGRAM_REJECTED
-     * -# Pack error code into payload bytes [2-3]
-     * -# Push message to CAN TX FIFO
-     * -# Free buffer after transmission
-     *
-     * Use cases:
-     * - Multi-frame message received out of sequence
-     * - Middle or last frame received with no matching first frame
-     * - Protocol violation detected during message assembly
+     * -# Allocate an OpenLCB BASIC buffer; silently drop if allocation fails.
+     * -# Map MTI: datagram → MTI_DATAGRAM_REJECTED_REPLY, others → MTI_OPTIONAL_INTERACTION_REJECTED.
+     * -# Load the reply message with swapped source/dest aliases.
+     * -# Write dest_alias and error_code into payload bytes 0-1 and 2-3.
+     * -# Push to the OpenLCB Tx FIFO.
      *
      * @verbatim
-     * @param source_alias Alias of node that sent the problematic frame
-     * @param dest_alias Alias of our node receiving the frame
-     * @param mti Original MTI of the message being rejected
-     * @param error_code OpenLCB error code indicating rejection reason
+     * @param source_alias Alias of the node that sent the problematic frame.
+     * @param dest_alias   Alias of our node that received the frame.
+     * @param mti          Original MTI of the message being rejected.
+     * @param error_code   OpenLCB error code (e.g. ERROR_TEMPORARY_OUT_OF_ORDER_*).
      * @endverbatim
      *
-     * @warning Silently drops message if buffer allocation fails
-     * @warning NOT thread-safe
-     *
-     * @attention Error codes should be from OpenLCB standard (0x2040 for out-of-order)
-     *
-     * @see CanBufferStore_allocate_buffer - Buffer allocation
-     * @see CanUtilities_load_openlcb_datagram_rejected_can_message - Message builder
+     * @warning Silently drops if buffer allocation fails.
      */
 static void _load_reject_message(uint16_t source_alias, uint16_t dest_alias, uint16_t mti, uint16_t error_code) {
 
@@ -158,40 +131,22 @@ static void _load_reject_message(uint16_t source_alias, uint16_t dest_alias, uin
 }
 
     /**
-     * @brief Checks if received frame indicates a duplicate alias condition
+     * @brief Checks whether the source alias of a received frame duplicates one of our registered aliases.
      *
      * @details Algorithm:
-     * -# Extract source alias from CAN message identifier
-     * -# Look up alias in our alias mapping table
-     * -# If alias not found: return false (no duplicate)
-     * -# If alias found: we have a duplicate condition
-     * -# Set duplicate alias flag in mapping info
-     * -# Allocate CAN buffer for RID response
-     * -# If allocation succeeds:
-     *    - Build RID frame with our alias
-     *    - Send to indicate we already have this alias
-     *    - Free buffer
-     * -# Return true (duplicate detected)
-     *
-     * Use cases:
-     * - CID frame received during another node's login
-     * - RID frame received claiming our alias
-     * - AMD frame received with our alias
+     * -# Extract source alias from can_msg identifier.
+     * -# Look up alias in our mapping table; return false if not found.
+     * -# Mark the mapping entry as duplicate and set the global duplicate flag.
+     * -# If our alias is already permitted, send an AMR frame to signal the conflict.
+     * -# Return true.
      *
      * @verbatim
-     * @param can_msg Pointer to received CAN frame being checked
+     * @param can_msg Received CAN frame to check.
      * @endverbatim
      *
-     * @return true if duplicate alias detected, false if no conflict
+     * @return true if a duplicate alias was detected, false otherwise.
      *
-     * @warning Silently drops RID response if buffer allocation fails
-     * @warning NOT thread-safe
-     *
-     * @attention Main state machine must check duplicate flag and handle conflict
-     * @attention RID response helps other node detect conflict quickly
-     *
-     * @see AliasMappings_find_mapping_by_alias - Alias lookup
-     * @see AliasMappings_set_has_duplicate_alias_flag - Sets global flag
+     * @warning Silently drops the AMR response if buffer allocation fails.
      */
 static bool _check_for_duplicate_alias(can_msg_t* can_msg) {
 
@@ -202,6 +157,7 @@ static bool _check_for_duplicate_alias(can_msg_t* can_msg) {
     if (!alias_mapping) {
 
         return false; // Done nothing to do
+
     }
 
     alias_mapping->is_duplicate = true; // flag for the main loop to handle
@@ -262,6 +218,7 @@ void CanRxMessageHandler_first_frame(can_msg_t* can_msg, uint8_t offset, payload
             0,
             mti);
 
+    target_openlcb_msg->timer.assembly_ticks = _interface->get_current_tick();
     target_openlcb_msg->state.inprocess = true;
 
     CanUtilities_append_can_payload_to_openlcb_payload(target_openlcb_msg, can_msg, offset);
@@ -279,6 +236,20 @@ void CanRxMessageHandler_middle_frame(can_msg_t* can_msg, uint8_t offset) {
     openlcb_msg_t* target_openlcb_msg = OpenLcbBufferList_find(source_alias, dest_alias, mti);
 
     if (!target_openlcb_msg) {
+
+        _load_reject_message(dest_alias, source_alias, mti, ERROR_TEMPORARY_OUT_OF_ORDER_MIDDLE_END_WITH_NO_START);
+
+        return;
+
+    }
+
+    uint8_t elapsed = (uint8_t) (_interface->get_current_tick() - target_openlcb_msg->timer.assembly_ticks);
+
+    if (elapsed >= CAN_RX_INPROCESS_TIMEOUT_TICKS) {
+
+        // Stale assembly — free and reject
+        OpenLcbBufferList_release(target_openlcb_msg);
+        OpenLcbBufferStore_free_buffer(target_openlcb_msg);
 
         _load_reject_message(dest_alias, source_alias, mti, ERROR_TEMPORARY_OUT_OF_ORDER_MIDDLE_END_WITH_NO_START);
 
@@ -315,36 +286,6 @@ void CanRxMessageHandler_last_frame(can_msg_t* can_msg, uint8_t offset) {
 
 }
 
-    /**
-     * @brief Handles a complete single-frame OpenLCB message
-     *
-     * @details Algorithm:
-     * -# Extract source and destination aliases
-     * -# Convert CAN MTI to OpenLCB MTI
-     * -# Allocate OpenLCB message buffer
-     * -# If allocation fails: silently drop
-     * -# Initialize message structure
-     * -# Copy all payload data
-     * -# Push directly to OpenLCB FIFO
-     *
-     * Use cases:
-     * - Short addressed messages
-     * - Event reports
-     * - Protocol queries
-     *
-     * @verbatim
-     * @param can_msg Pointer to received CAN frame (complete message)
-     * @param offset Byte offset where OpenLCB data begins
-     * @param data_type Type of buffer to allocate (typically BASIC)
-     * @endverbatim
-     *
-     * @warning Silently drops if buffer allocation fails
-     * @warning NOT thread-safe
-     *
-     * @attention Most common message type on OpenLCB networks
-     *
-     * @see OpenLcbBufferFifo_push - Queues for protocol processing
-     */
 void CanRxMessageHandler_single_frame(can_msg_t* can_msg, uint8_t offset, payload_type_enum data_type) {
 
     openlcb_msg_t* target_openlcb_msg = _interface->openlcb_buffer_store_allocate_buffer(data_type);
@@ -376,31 +317,21 @@ void CanRxMessageHandler_single_frame(can_msg_t* can_msg, uint8_t offset, payloa
 }
 
     /**
-     * @brief Handles legacy SNIP messages without standard framing bits
+     * @brief Handles legacy SNIP messages that lack standard multi-frame framing bits.
      *
      * @details Algorithm:
-     * -# Search for in-progress SNIP message
-     * -# If not found: allocate and initialize
-     * -# Append payload data
-     * -# Count NULL bytes
-     * -# If 6 NULLs found: message complete, push to FIFO
-     *
-     * Use cases:
-     * - Supporting early SNIP implementations
-     * - Backward compatibility
+     * -# Search for an in-progress SNIP message matching source/dest/MTI.
+     * -# If none found: delegate to CanRxMessageHandler_first_frame to allocate and start one.
+     * -# If found and NULL count < 6: delegate to CanRxMessageHandler_middle_frame to append data.
+     * -# If found and NULL count >= 6: delegate to CanRxMessageHandler_last_frame to complete it.
      *
      * @verbatim
-     * @param can_msg Pointer to received CAN frame containing SNIP data
-     * @param offset Byte offset where SNIP data begins
-     * @param data_type Buffer type (must be SNIP)
+     * @param can_msg    Received CAN frame containing SNIP data.
+     * @param offset     Byte offset where SNIP data begins.
+     * @param data_type  Must be SNIP.
      * @endverbatim
      *
-     * @warning Only for SNIP messages with 6 NULL terminators
-     * @warning NOT thread-safe
-     *
-     * @attention Legacy protocol - modern nodes use standard framing
-     *
-     * @see ProtocolSnip_validate_snip_reply - Validates format
+     * @warning Only correct for MTI_SIMPLE_NODE_INFO_REPLY without framing bits.
      */
 void CanRxMessageHandler_can_legacy_snip(can_msg_t* can_msg, uint8_t offset, payload_type_enum data_type) {
 
@@ -414,107 +345,16 @@ void CanRxMessageHandler_can_legacy_snip(can_msg_t* can_msg, uint8_t offset, pay
 
     if (!openlcb_msg_inprocess) { // Do we have one in process?
 
-    /**
-     * @brief Handles the first frame of a multi-frame OpenLCB message
-     *
-     * @details Algorithm:
-     * -# Extract source and destination aliases from CAN message
-     * -# Convert CAN MTI to OpenLCB MTI
-     * -# Check if message already in progress (duplicate first frame)
-     * -# If found: send rejection for out-of-order sequence, return
-     * -# Allocate OpenLCB message buffer of specified data_type
-     * -# If allocation fails: send rejection, return
-     * -# Initialize message structure with source/dest/MTI
-     * -# Copy payload data from CAN frame starting at offset
-     * -# Add message to buffer list for continued assembly
-     *
-     * Use cases:
-     * - Starting datagram reception
-     * - Starting SNIP message reception
-     * - Starting any multi-frame addressed message
-     *
-     * @verbatim
-     * @param can_msg Pointer to received CAN frame (first frame)
-     * @param offset Byte offset where OpenLCB data begins (2 if addressed, 0 if global)
-     * @param data_type Type of buffer to allocate (BASIC, DATAGRAM, SNIP, STREAM)
-     * @endverbatim
-     *
-     * @warning Sends rejection if buffer allocation fails
-     * @warning Sends rejection if duplicate first frame detected
-     * @warning NOT thread-safe
-     *
-     * @attention Frame must have framing bits set to MULTIFRAME_FIRST
-     *
-     * @see CanRxMessageHandler_middle_frame - Processes continuation frames
-     * @see CanRxMessageHandler_last_frame - Completes message assembly
-     */
         CanRxMessageHandler_first_frame(can_msg, offset, data_type);
 
     } else { // Yes we have one in process
 
         if (CanUtilities_count_nulls_in_payloads(openlcb_msg_inprocess, can_msg) < 6) {
 
-    /**
-     * @brief Handles a middle frame of a multi-frame OpenLCB message
-     *
-     * @details Algorithm:
-     * -# Extract source and destination aliases from CAN message
-     * -# Convert CAN MTI to OpenLCB MTI
-     * -# Search buffer list for in-progress message
-     * -# If not found: send rejection, return
-     * -# Append payload data to message buffer
-     * -# Update payload count
-     *
-     * Use cases:
-     * - Continuing datagram reception
-     * - Continuing SNIP message reception
-     * - Processing frames between first and last
-     *
-     * @verbatim
-     * @param can_msg Pointer to received CAN frame (middle frame)
-     * @param offset Byte offset where OpenLCB data begins
-     * @endverbatim
-     *
-     * @warning Sends rejection if no matching message in progress
-     * @warning NOT thread-safe
-     *
-     * @attention Frame must have framing bits set to MULTIFRAME_MIDDLE
-     *
-     * @see CanRxMessageHandler_first_frame - Started message assembly
-     */
             CanRxMessageHandler_middle_frame(can_msg, offset);
 
         } else {
 
-    /**
-     * @brief Handles the last frame of a multi-frame OpenLCB message
-     *
-     * @details Algorithm:
-     * -# Extract source and destination aliases
-     * -# Search buffer list for in-progress message
-     * -# If not found: send rejection, return
-     * -# Append final payload data
-     * -# Mark message complete
-     * -# Remove from buffer list
-     * -# Push to OpenLCB FIFO
-     *
-     * Use cases:
-     * - Completing datagram reception
-     * - Completing SNIP message reception
-     * - Finalizing any multi-frame message
-     *
-     * @verbatim
-     * @param can_msg Pointer to received CAN frame (last frame)
-     * @param offset Byte offset where OpenLCB data begins
-     * @endverbatim
-     *
-     * @warning Sends rejection if no matching message in progress
-     * @warning NOT thread-safe
-     *
-     * @attention Frame must have framing bits set to MULTIFRAME_FINAL
-     *
-     * @see OpenLcbBufferFifo_push - Queues for protocol processing
-     */
             CanRxMessageHandler_last_frame(can_msg, offset);
 
         }
@@ -523,100 +363,55 @@ void CanRxMessageHandler_can_legacy_snip(can_msg_t* can_msg, uint8_t offset, pay
 
 }
 
-    /**
-     * @brief Placeholder for stream protocol frame handling
-     *
-     * @details Algorithm:
-     * -# Currently no implementation
-     * -# Reserved for future stream protocol
-     *
-     * Use cases:
-     * - Firmware upgrade (future)
-     * - Data streaming (future)
-     *
-     * @verbatim
-     * @param can_msg Pointer to received stream frame
-     * @param offset Byte offset where stream data begins
-     * @param data_type Buffer type (must be STREAM)
-     * @endverbatim
-     *
-     * @warning Currently unimplemented
-     * @warning NOT thread-safe
-     *
-     * @attention Reserved for future use
-     */
+    /** @brief Stream frame handler — reserved for future use, not yet implemented. */
 void CanRxMessageHandler_stream_frame(can_msg_t* can_msg, uint8_t offset, payload_type_enum data_type) {
 
 
 }
 
     /**
-     * @brief Handles CID (Check ID) frames during alias allocation
+     * @brief Handles CID frames per CanFrameTransferS Section 3.5.3.
      *
-     * @details Algorithm:
-     * -# Extract alias being checked
-     * -# Look up in our mapping table
-     * -# If we have it: send RID response
-     *
-     * Use cases:
-     * - Responding to other nodes' login
-     * - Preventing duplicate aliases
+     * @details Per the standard: "Nodes that receive a CID frame that contains
+     * the alias they are using or have reserved shall respond with an RID frame."
+     * CID is a probe during alias reservation — the correct defence is always
+     * RID, regardless of whether the node is permitted or still claiming.
+     * This differs from RID/AMD/AMR receipt which indicates an active alias
+     * collision and is handled by the internal `_check_for_duplicate_alias()` helper.
      *
      * @verbatim
-     * @param can_msg Pointer to received CID frame
+     * @param can_msg  Received CID frame.
      * @endverbatim
-     *
-     * @warning Silently drops RID if buffer allocation fails
-     * @warning NOT thread-safe
-     *
-     * @attention Part of alias allocation protocol
-     *
-     * @see CanRxMessageHandler_rid_frame - Handles RID reception
      */
 void CanRxMessageHandler_cid_frame(can_msg_t* can_msg) {
 
-    if (!can_msg) { return; }
+    if (!can_msg) {
 
-        // Check for duplicate Alias
-        uint16_t source_alias = CanUtilities_extract_source_alias_from_can_identifier(can_msg);
-        alias_mapping_t *alias_mapping = _interface->alias_mapping_find_mapping_by_alias(source_alias);
+        return;
 
-        if (alias_mapping)
-        {
+    }
 
-            can_msg_t *reply_msg = _interface->can_buffer_store_allocate_buffer();
+    uint16_t source_alias = CanUtilities_extract_source_alias_from_can_identifier(can_msg);
+    alias_mapping_t *alias_mapping = _interface->alias_mapping_find_mapping_by_alias(source_alias);
 
-            if (reply_msg)
-            {
-                reply_msg->identifier = RESERVED_TOP_BIT | CAN_CONTROL_FRAME_RID | source_alias;
-                reply_msg->payload_count = 0;
+    if (alias_mapping) {
 
-                CanBufferFifo_push(reply_msg);
-            }
+        can_msg_t *reply_msg = _interface->can_buffer_store_allocate_buffer();
+
+        if (reply_msg) {
+
+            reply_msg->identifier = RESERVED_TOP_BIT | CAN_CONTROL_FRAME_RID | source_alias;
+            reply_msg->payload_count = 0;
+
+            CanBufferFifo_push(reply_msg);
+
         }
+
+    }
 
 }
 
-    /**
-     * @brief Handles RID (Reserve ID) frames
-     *
-     * @details Algorithm:
-     * -# Check for duplicate alias
-     * -# Sets flag if conflict detected
-     *
-     * Use cases:
-     * - Alias conflict detection
-     * - Network monitoring
-     *
-     * @verbatim
-     * @param can_msg Pointer to received RID frame
-     * @endverbatim
-     *
-     * @warning Sets duplicate flag if conflict
-     * @warning NOT thread-safe
-     *
-     * @see _check_for_duplicate_alias - Conflict detection
-     */
+    /** @brief Handles RID frames: checks for a duplicate alias and flags it if found. */
 void CanRxMessageHandler_rid_frame(can_msg_t* can_msg) {
 
     _check_for_duplicate_alias(can_msg);
@@ -624,51 +419,123 @@ void CanRxMessageHandler_rid_frame(can_msg_t* can_msg) {
 }
 
     /**
-     * @brief Handles AMD (Alias Map Definition) frames
+     * @brief Releases held attach messages whose listener Node ID matches.
      *
-     * @details Algorithm:
-     * -# Check for duplicate alias
-     * -# AMD contains full NodeID
+     * @details Scans the OpenLcbBufferList for held Train Listener Attach
+     * commands (state.inprocess == true, MTI_TRAIN_PROTOCOL, instruction ==
+     * TRAIN_LISTENER_CONFIG, sub-command == TRAIN_LISTENER_ATTACH) whose
+     * embedded listener Node ID matches listener_id.  For each match, clears
+     * state.inprocess, releases from the BufferList, and pushes to the FIFO
+     * for normal protocol processing.
      *
-     * Use cases:
-     * - Learning alias/NodeID mappings
-     * - Duplicate detection
+     * Called from the AMD handler after the listener alias table has been
+     * updated — the attach can now proceed because the alias is resolved.
+     *
+     * @param listener_id  48-bit Node ID from the AMD payload.
+     */
+static void _release_held_messages_for_listener(node_id_t listener_id) {
+
+    for (int i = 0; i < LEN_MESSAGE_BUFFER; i++) {
+
+        openlcb_msg_t *msg = OpenLcbBufferList_index_of(i);
+
+        if (!msg) {
+
+            continue;
+
+        }
+
+        if (!msg->state.inprocess) {
+
+            continue;
+
+        }
+
+        if (msg->mti != MTI_TRAIN_PROTOCOL) {
+
+            continue;
+
+        }
+
+        uint8_t instruction = OpenLcbUtilities_extract_byte_from_openlcb_payload(msg, 0);
+        uint8_t sub_command = OpenLcbUtilities_extract_byte_from_openlcb_payload(msg, 1);
+
+        if (instruction != TRAIN_LISTENER_CONFIG) {
+
+            continue;
+
+        }
+
+        if (sub_command != TRAIN_LISTENER_ATTACH) {
+
+            continue;
+
+        }
+
+        node_id_t held_listener_id =
+                OpenLcbUtilities_extract_node_id_from_openlcb_payload(msg, 3);
+
+        if (held_listener_id != listener_id) {
+
+            continue;
+
+        }
+
+        // Match — alias now resolved, release to FIFO for protocol dispatch
+        msg->state.inprocess = false;
+        OpenLcbBufferList_release(msg);
+        OpenLcbBufferFifo_push(msg);
+
+    }
+
+}
+
+    /**
+     * @brief Handles AMD (Alias Map Definition) CAN control frames.
+     *
+     * @details Performs two actions:
+     * -# Checks for a duplicate alias condition (our own alias conflict).
+     * -# If the listener alias feature is linked in, updates the listener
+     *    table with the resolved alias and releases any held attach messages
+     *    that were waiting on this Node ID.
      *
      * @verbatim
-     * @param can_msg Pointer to received AMD frame with NodeID
+     * @param can_msg  Received AMD frame (6-byte NodeID in payload).
      * @endverbatim
      *
-     * @warning Sets duplicate flag if conflict
-     * @warning NOT thread-safe
-     *
-     * @see AliasMappings_register - Stores mapping
+     * @warning NOT thread-safe.
      */
 void CanRxMessageHandler_amd_frame(can_msg_t* can_msg) {
 
     _check_for_duplicate_alias(can_msg);
 
+    // Update listener alias table and release held attach messages (DI, no-op if not linked in)
+    if (_interface->listener_set_alias) {
+
+        node_id_t node_id = CanUtilities_extract_can_payload_as_node_id(can_msg);
+        uint16_t alias = CanUtilities_extract_source_alias_from_can_identifier(can_msg);
+
+        _interface->listener_set_alias(node_id, alias);
+
+        _release_held_messages_for_listener(node_id);
+
+    }
+
 }
 
     /**
-     * @brief Handles AME (Alias Map Enquiry) frames
+     * @brief Handles AME frames: responds with AMD frames for matching aliases.
      *
      * @details Algorithm:
-     * -# Check for duplicate (return if found)
-     * -# If global: respond with all aliases
-     * -# If specific: respond if match
-     *
-     * Use cases:
-     * - Gateway alias table building
-     * - Network discovery
+     * -# Check for duplicate alias; return early if detected.
+     * -# If payload is non-empty: look up by Node ID, respond with one AMD if found.
+     * -# If payload is empty (global query): respond with AMD for every registered alias.
      *
      * @verbatim
-     * @param can_msg Pointer to received AME frame
+     * @param can_msg Received AME frame.
      * @endverbatim
      *
-     * @warning Silently drops if buffer allocation fails
-     * @warning NOT thread-safe
-     *
-     * @see AliasMappings_get_alias_mapping_info - Access mappings
+     * @warning Silently drops responses if buffer allocation fails.
      */
 void CanRxMessageHandler_ame_frame(can_msg_t* can_msg) {
 
@@ -684,7 +551,7 @@ void CanRxMessageHandler_ame_frame(can_msg_t* can_msg) {
 
         alias_mapping_t *alias_mapping = _interface->alias_mapping_find_mapping_by_node_id(CanUtilities_extract_can_payload_as_node_id(can_msg));
 
-        if (alias_mapping) {
+        if (alias_mapping && alias_mapping->is_permitted) {
 
             outgoing_can_msg = _interface->can_buffer_store_allocate_buffer();
 
@@ -708,7 +575,7 @@ void CanRxMessageHandler_ame_frame(can_msg_t* can_msg) {
 
     for (int i = 0; i < ALIAS_MAPPING_BUFFER_DEPTH; i++) {
 
-        if (alias_mapping_info->list[i].alias != 0x00) {
+        if (alias_mapping_info->list[i].alias != 0x00 && alias_mapping_info->list[i].is_permitted) {
 
             outgoing_can_msg = _interface->can_buffer_store_allocate_buffer();
 
@@ -727,52 +594,85 @@ void CanRxMessageHandler_ame_frame(can_msg_t* can_msg) {
 }
 
     /**
-     * @brief Handles AMR (Alias Map Reset) frames
+     * @brief Releases and frees all BufferList messages from a released alias.
      *
-     * @details Algorithm:
-     * -# Check for duplicate alias
+     * @details Scans the OpenLcbBufferList for messages whose source_alias
+     * matches the released alias.  The sender has gone away — partial
+     * assemblies will never complete, and completed messages that have not
+     * yet been pushed to the FIFO should not be processed (any reply would
+     * target a stale alias).  Freeing them immediately reclaims scarce
+     * buffer slots that would otherwise sit until the 3-second timeout.
      *
-     * Use cases:
-     * - Alias conflict resolution
-     * - Forced deallocation
+     * @param alias  12-bit CAN alias that was released via AMR.
+     */
+static void _check_and_release_messages_by_source_alias(uint16_t alias) {
+
+    for (int i = 0; i < LEN_MESSAGE_BUFFER; i++) {
+
+        openlcb_msg_t *msg = OpenLcbBufferList_index_of(i);
+
+        if (!msg) {
+
+            continue;
+
+        }
+
+        if (msg->source_alias != alias) {
+
+            continue;
+
+        }
+
+        OpenLcbBufferList_release(msg);
+        OpenLcbBufferStore_free_buffer(msg);
+
+    }
+
+}
+
+    /**
+     * @brief Handles AMR (Alias Map Reset) CAN control frames.
+     *
+     * @details Performs four actions when a remote node releases its alias:
+     * -# Checks for a duplicate alias condition (our own alias conflict).
+     * -# BufferList scrub: frees all messages from the released alias
+     *    (partial assemblies will never complete, completed messages should
+     *    not generate replies to a stale alias).
+     * -# FIFO scrub: marks queued incoming messages from the released alias
+     *    as invalid so the pop-phase guard or TX guard will discard them,
+     *    preventing late replies to the stale alias.
+     * -# Listener table cleanup: clears the released alias from the listener
+     *    table so future TX-path lookups return alias == 0 (unresolved)
+     *    instead of the stale alias.  DI, no-op if not linked in.
      *
      * @verbatim
-     * @param can_msg Pointer to received AMR frame
+     * @param can_msg  Received AMR frame.
      * @endverbatim
      *
-     * @warning Sets duplicate flag if our alias
-     * @warning NOT thread-safe
-     *
-     * @see CanMainStatemachine_handle_duplicate_aliases - Resolution
+     * @warning NOT thread-safe.
      */
 void CanRxMessageHandler_amr_frame(can_msg_t* can_msg) {
 
     _check_for_duplicate_alias(can_msg);
 
+    uint16_t alias = CanUtilities_extract_source_alias_from_can_identifier(can_msg);
+
+    _check_and_release_messages_by_source_alias(alias);
+
+    OpenLcbBufferFifo_check_and_invalidate_messages_by_source_alias(alias);
+
+    // Clear stale alias from listener table (DI, no-op if not linked in)
+    if (_interface->listener_clear_alias_by_alias) {
+
+        _interface->listener_clear_alias_by_alias(alias);
+
+    }
+
 }
 
-    /**
-     * @brief Handles Error Information Report frames
-     *
-     * @details Algorithm:
-     * -# Check for duplicate alias
-     *
-     * Use cases:
-     * - Error notifications
-     * - Network diagnostics
-     *
-     * @verbatim
-     * @param can_msg Pointer to received error report frame
-     * @endverbatim
-     *
-     * @warning Sets duplicate flag if relevant
-     * @warning NOT thread-safe
-     *
-     * @see _check_for_duplicate_alias - Checks relevance
-     */
+    /** @brief Handles Error Information Report frames: checks for a duplicate alias and flags it if found. */
 void CanRxMessageHandler_error_info_report_frame(can_msg_t* can_msg) {
 
     _check_for_duplicate_alias(can_msg);
 
 }
-

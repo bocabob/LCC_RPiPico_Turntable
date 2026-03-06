@@ -25,15 +25,14 @@
  * POSSIBILITY OF SUCH DAMAGE.
  *
  * @file openlcb_config.c
- * @brief Library-internal wiring module for Option D config facade
+ * @brief Library-internal wiring module for config facade
  *
- * @details Reads from openlcb_config_t + feature flags, builds all 14 internal
- * interface structs, and calls all Module_initialize() functions in the correct
- * order. This single file replaces all per-application dependency_injection.c
- * copies.
+ * @details Reads from openlcb_config_t and compile-time feature guards
+ * (OPENLCB_COMPILE_*), builds internal interface structs, and calls all
+ * Module_initialize() functions in the correct order.
  *
  * @author Jim Kueneman
- * @date 17 Feb 2026
+ * @date 4 Mar 2026
  */
 
 #include "openlcb_config.h"
@@ -50,17 +49,35 @@
 #include "openlcb_login_statemachine.h"
 #include "openlcb_login_statemachine_handler.h"
 #include "protocol_message_network.h"
-#include "protocol_event_transport.h"
 #include "protocol_snip.h"
+
+#ifdef OPENLCB_COMPILE_EVENTS
+#include "protocol_event_transport.h"
+#endif
+
+#ifdef OPENLCB_COMPILE_DATAGRAMS
 #include "protocol_datagram_handler.h"
+#endif
+
+#ifdef OPENLCB_COMPILE_MEMORY_CONFIGURATION
 #include "protocol_config_mem_read_handler.h"
 #include "protocol_config_mem_write_handler.h"
 #include "protocol_config_mem_operations_handler.h"
+#endif
+
+#ifdef OPENLCB_COMPILE_BROADCAST_TIME
 #include "protocol_broadcast_time_handler.h"
 #include "openlcb_application_broadcast_time.h"
+#endif
+
+#ifdef OPENLCB_COMPILE_TRAIN
 #include "protocol_train_handler.h"
 #include "openlcb_application_train.h"
+#endif
+
+#if defined(OPENLCB_COMPILE_TRAIN) && defined(OPENLCB_COMPILE_TRAIN_SEARCH)
 #include "protocol_train_search_handler.h"
+#endif
 
 // CAN transport
 #include "../drivers/canbus/can_tx_statemachine.h"
@@ -73,24 +90,85 @@ static interface_openlcb_login_state_machine_t _login_sm;
 static interface_openlcb_login_message_handler_t _login_msg;
 static interface_openlcb_node_t _node;
 static interface_openlcb_application_t _app;
-static interface_openlcb_protocol_event_transport_t _event_transport;
 static interface_openlcb_protocol_snip_t _snip;
 static interface_openlcb_protocol_message_network_t _msg_network;
+
+#ifdef OPENLCB_COMPILE_EVENTS
+static interface_openlcb_protocol_event_transport_t _event_transport;
+#endif
+
+#ifdef OPENLCB_COMPILE_DATAGRAMS
 static interface_protocol_datagram_handler_t _datagram;
+#endif
+
+#ifdef OPENLCB_COMPILE_MEMORY_CONFIGURATION
 static interface_protocol_config_mem_read_handler_t _config_read;
 static interface_protocol_config_mem_write_handler_t _config_write;
 static interface_protocol_config_mem_operations_handler_t _config_ops;
+#endif
+
+#ifdef OPENLCB_COMPILE_BROADCAST_TIME
 static interface_openlcb_protocol_broadcast_time_handler_t _broadcast_time;
 static interface_openlcb_application_broadcast_time_t _app_broadcast_time;
+#endif
+
+#ifdef OPENLCB_COMPILE_TRAIN
 static interface_protocol_train_handler_t _train_handler;
 static interface_openlcb_application_train_t _app_train;
+#endif
+
+#if defined(OPENLCB_COMPILE_TRAIN) && defined(OPENLCB_COMPILE_TRAIN_SEARCH)
 static interface_protocol_train_search_handler_t _train_search;
+#endif
 
 static const openlcb_config_t *_config;
-static uint32_t _features;
+
+    /**
+     * @brief Global 100ms tick counter — the sole action of the timer interrupt.
+     *
+     * @details This counter is the library's timekeeping foundation. It is
+     * incremented once per 100ms timer tick (which may be an interrupt or a
+     * separate thread depending on the platform).
+     *
+     * ALL other modules compute elapsed time by snapshotting this counter at a
+     * start event and later subtracting: elapsed = (current - snapshot). The
+     * uint8_t wraps at 256, and unsigned subtraction handles the wrap correctly
+     * for durations up to 255 ticks (25.5 seconds).
+     *
+     * Platform safety: volatile uint8_t reads and writes are single-instruction
+     * operations on all target architectures (8-bit PIC through 64-bit ARM).
+     * Only the timer interrupt performs the increment (read-modify-write); all
+     * other contexts only read. Timer interrupts do not re-enter, so the
+     * increment is safe without locking.
+     *
+     * Module isolation: no module calls this directly. The wiring code reads it
+     * once per main-loop iteration and passes the value down as a parameter.
+     * The Rx handler receives it via an interface function pointer. This
+     * preserves the library's dependency-injection pattern.
+     */
+static volatile uint8_t _global_100ms_tick = 0;
+
+    /**
+     * @brief Returns the current value of the global 100ms tick counter.
+     *
+     * @details Used by wiring code (openlcb_config.c, can_config.c) to read
+     * the clock and inject it into modules via parameters or interface
+     * function pointers. Individual modules should NOT call this directly —
+     * they receive the tick through their function parameters or interface.
+     *
+     * @return Current tick count (wraps at 255).
+     */
+uint8_t OpenLcb_get_global_100ms_tick(void) {
+
+    return _global_100ms_tick;
+
+}
 
 // ---- Build functions ----
 
+#ifdef OPENLCB_COMPILE_EVENTS
+
+    /** @brief Wires user event callbacks into the event transport interface struct. */
 static void _build_event_transport(void) {
 
     memset(&_event_transport, 0, sizeof(_event_transport));
@@ -114,6 +192,11 @@ static void _build_event_transport(void) {
 
 }
 
+#endif /* OPENLCB_COMPILE_EVENTS */
+
+#ifdef OPENLCB_COMPILE_BROADCAST_TIME
+
+    /** @brief Wires user broadcast-time callbacks into the handler interface struct. */
 static void _build_broadcast_time(void) {
 
     memset(&_broadcast_time, 0, sizeof(_broadcast_time));
@@ -128,6 +211,7 @@ static void _build_broadcast_time(void) {
 
 }
 
+    /** @brief Wires user broadcast-time callbacks into the application interface struct. */
 static void _build_app_broadcast_time(void) {
 
     memset(&_app_broadcast_time, 0, sizeof(_app_broadcast_time));
@@ -140,6 +224,11 @@ static void _build_app_broadcast_time(void) {
 
 }
 
+#endif /* OPENLCB_COMPILE_BROADCAST_TIME */
+
+#ifdef OPENLCB_COMPILE_TRAIN
+
+    /** @brief Wires user train callbacks into the train handler interface struct. */
 static void _build_train_handler(void) {
 
     memset(&_train_handler, 0, sizeof(_train_handler));
@@ -172,6 +261,7 @@ static void _build_train_handler(void) {
 
 }
 
+    /** @brief Wires train send function and heartbeat callback into the application train interface. */
 static void _build_app_train(void) {
 
     memset(&_app_train, 0, sizeof(_app_train));
@@ -181,6 +271,11 @@ static void _build_app_train(void) {
 
 }
 
+#endif /* OPENLCB_COMPILE_TRAIN */
+
+#if defined(OPENLCB_COMPILE_TRAIN) && defined(OPENLCB_COMPILE_TRAIN_SEARCH)
+
+    /** @brief Wires user train-search callbacks into the search handler interface struct. */
 static void _build_train_search_handler(void) {
 
     memset(&_train_search, 0, sizeof(_train_search));
@@ -190,6 +285,9 @@ static void _build_train_search_handler(void) {
 
 }
 
+#endif /* OPENLCB_COMPILE_TRAIN && OPENLCB_COMPILE_TRAIN_SEARCH */
+
+    /** @brief Wires the user 100ms timer callback into the node interface struct. */
 static void _build_node(void) {
 
     memset(&_node, 0, sizeof(_node));
@@ -198,16 +296,20 @@ static void _build_node(void) {
 
 }
 
+    /** @brief Wires event-state extraction helpers into the login message handler interface. */
 static void _build_login_message_handler(void) {
 
     memset(&_login_msg, 0, sizeof(_login_msg));
 
-    // Library-internal wiring -- always the same
+    // Library-internal wiring -- event state extraction only needed when events compiled
+#ifdef OPENLCB_COMPILE_EVENTS
     _login_msg.extract_producer_event_state_mti = &ProtocolEventTransport_extract_producer_event_status_mti;
     _login_msg.extract_consumer_event_state_mti = &ProtocolEventTransport_extract_consumer_event_status_mti;
+#endif
 
 }
 
+    /** @brief Wires CAN send, node iteration, and login helpers into the login state machine interface. */
 static void _build_login_statemachine(void) {
 
     memset(&_login_sm, 0, sizeof(_login_sm));
@@ -232,6 +334,17 @@ static void _build_login_statemachine(void) {
 
 }
 
+    /** @brief Wires OIR/TDE application callbacks into the message network interface. */
+static void _build_msg_network(void) {
+
+    memset(&_msg_network, 0, sizeof(_msg_network));
+
+    _msg_network.on_optional_interaction_rejected = _config->on_optional_interaction_rejected;
+    _msg_network.on_terminate_due_to_error        = _config->on_terminate_due_to_error;
+
+}
+
+    /** @brief Wires the config memory read callback into the SNIP interface struct. */
 static void _build_snip(void) {
 
     memset(&_snip, 0, sizeof(_snip));
@@ -240,6 +353,9 @@ static void _build_snip(void) {
 
 }
 
+#ifdef OPENLCB_COMPILE_MEMORY_CONFIGURATION
+
+    /** @brief Wires read callbacks, SNIP helpers, and address-space handlers into the config read interface. */
 static void _build_config_mem_read(void) {
 
     memset(&_config_read, 0, sizeof(_config_read));
@@ -266,18 +382,17 @@ static void _build_config_mem_read(void) {
     _config_read.read_request_acdi_user = &ProtocolConfigMemReadHandler_read_request_acdi_user;
 
     // Train profile: FDI + Function Config Memory read request handlers
-    if (_features & OPENLCB_FEATURE_TRAIN) {
-
-        _config_read.read_request_train_function_config_definition_info = &ProtocolConfigMemReadHandler_read_request_train_function_definition_info;
-        _config_read.read_request_train_function_config_memory = &ProtocolConfigMemReadHandler_read_request_train_function_config_memory;
-
-    }
+#ifdef OPENLCB_COMPILE_TRAIN
+    _config_read.read_request_train_function_config_definition_info = &ProtocolConfigMemReadHandler_read_request_train_function_definition_info;
+    _config_read.read_request_train_function_config_memory = &ProtocolConfigMemReadHandler_read_request_train_function_config_memory;
+#endif
 
     // User extension
     _config_read.delayed_reply_time = _config->config_mem_read_delayed_reply_time;
 
 }
 
+    /** @brief Wires write callbacks, firmware write, and address-space handlers into the config write interface. */
 static void _build_config_mem_write(void) {
 
     memset(&_config_write, 0, sizeof(_config_write));
@@ -285,24 +400,26 @@ static void _build_config_mem_write(void) {
     _config_write.load_datagram_received_ok_message       = &ProtocolDatagramHandler_load_datagram_received_ok_message;
     _config_write.load_datagram_received_rejected_message = &ProtocolDatagramHandler_load_datagram_rejected_message;
     _config_write.config_memory_write                     = _config->config_mem_write;
+    _config_write.config_memory_read                      = _config->config_mem_read;
     _config_write.write_request_config_mem                = &ProtocolConfigMemWriteHandler_write_request_config_mem;
     _config_write.write_request_acdi_user                 =  &ProtocolConfigMemWriteHandler_write_request_acdi_user;
 
     // Train profile: Function Config Memory write request handler
     // Note: FDI (0xFA) write is intentionally NOT wired -- it is read-only.
-    if (_features & OPENLCB_FEATURE_TRAIN) {
-
-        _config_write.write_request_train_function_config_memory = &ProtocolConfigMemWriteHandler_write_request_train_function_config_memory;
-        _config_write.on_function_changed = _config->on_train_function_changed;
-
-    }
+#ifdef OPENLCB_COMPILE_TRAIN
+    _config_write.write_request_train_function_config_memory = &ProtocolConfigMemWriteHandler_write_request_train_function_config_memory;
+    _config_write.on_function_changed = _config->on_train_function_changed;
+#endif
 
     // Firmware write (optional user callback)
+#ifdef OPENLCB_COMPILE_FIRMWARE
     _config_write.write_request_firmware = _config->firmware_write;
+#endif
     _config_write.delayed_reply_time = _config->config_mem_write_delayed_reply_time;
 
 }
 
+    /** @brief Wires operations commands (options, address space info, lock, reboot, factory reset) into the config ops interface. */
 static void _build_config_mem_operations(void) {
 
     memset(&_config_ops, 0, sizeof(_config_ops));
@@ -314,19 +431,28 @@ static void _build_config_mem_operations(void) {
     _config_ops.operations_request_get_address_space_info = &ProtocolConfigMemOperationsHandler_request_get_address_space_info;
     _config_ops.operations_request_reserve_lock           = &ProtocolConfigMemOperationsHandler_request_reserve_lock;
 
+#ifdef OPENLCB_COMPILE_FIRMWARE
     _config_ops.operations_request_freeze                 = _config->freeze;
     _config_ops.operations_request_unfreeze               = _config->unfreeze;
+#endif
     _config_ops.operations_request_reset_reboot           = _config->reboot;
     _config_ops.operations_request_factory_reset          = _config->factory_reset;
 
 }
 
+#endif /* OPENLCB_COMPILE_MEMORY_CONFIGURATION */
+
+#ifdef OPENLCB_COMPILE_DATAGRAMS
+
+    /** @brief Wires lock callbacks, address-space dispatchers, and operations handlers into the datagram interface. */
 static void _build_datagram_handler(void) {
 
     memset(&_datagram, 0, sizeof(_datagram));
 
     _datagram.lock_shared_resources   = _config->lock_shared_resources;
     _datagram.unlock_shared_resources = _config->unlock_shared_resources;
+
+#ifdef OPENLCB_COMPILE_MEMORY_CONFIGURATION
 
     // Read address spaces -- standard library implementations
     _datagram.memory_read_space_config_description_info = &ProtocolConfigMemReadHandler_read_space_config_description_info;
@@ -336,24 +462,22 @@ static void _build_datagram_handler(void) {
     _datagram.memory_read_space_acdi_user               = &ProtocolConfigMemReadHandler_read_space_acdi_user;
 
     // Train profile: FDI + Function Config Memory read spaces
-    if (_features & OPENLCB_FEATURE_TRAIN) {
-
-        _datagram.memory_read_space_train_function_definition_info = &ProtocolConfigMemReadHandler_read_space_train_function_definition_info;
-        _datagram.memory_read_space_train_function_config_memory   = &ProtocolConfigMemReadHandler_read_space_train_function_config_memory;
-
-    }
+#ifdef OPENLCB_COMPILE_TRAIN
+    _datagram.memory_read_space_train_function_definition_info = &ProtocolConfigMemReadHandler_read_space_train_function_definition_info;
+    _datagram.memory_read_space_train_function_config_memory   = &ProtocolConfigMemReadHandler_read_space_train_function_config_memory;
+#endif
 
     // Write address spaces
     _datagram.memory_write_space_configuration_memory = &ProtocolConfigMemWriteHandler_write_space_config_memory;
     _datagram.memory_write_space_acdi_user            = &ProtocolConfigMemWriteHandler_write_space_acdi_user;
+#ifdef OPENLCB_COMPILE_FIRMWARE
     _datagram.memory_write_space_firmware_upgrade     = &ProtocolConfigMemWriteHandler_write_space_firmware;
+#endif
 
     // Train profile: Function Config Memory write space
-    if (_features & OPENLCB_FEATURE_TRAIN) {
-
-        _datagram.memory_write_space_train_function_config_memory = &ProtocolConfigMemWriteHandler_write_space_train_function_config_memory;
-
-    }
+#ifdef OPENLCB_COMPILE_TRAIN
+    _datagram.memory_write_space_train_function_config_memory = &ProtocolConfigMemWriteHandler_write_space_train_function_config_memory;
+#endif
 
     // Operations commands
     _datagram.memory_options_cmd                                = &ProtocolConfigMemOperationsHandler_options_cmd;
@@ -371,10 +495,25 @@ static void _build_datagram_handler(void) {
     _datagram.memory_reset_reboot                               = &ProtocolConfigMemOperationsHandler_reset_reboot;
     _datagram.memory_factory_reset                              = &ProtocolConfigMemOperationsHandler_factory_reset;
 
-    // All remaining fields stay NULL (stream ops, reply handlers, write-under-mask, etc.)
+    // Write-under-mask address spaces
+    _datagram.memory_write_under_mask_space_config_description_info      = &ProtocolConfigMemWriteHandler_write_under_mask_space_config_description_info;
+    _datagram.memory_write_under_mask_space_all                          = &ProtocolConfigMemWriteHandler_write_under_mask_space_all;
+    _datagram.memory_write_under_mask_space_configuration_memory         = &ProtocolConfigMemWriteHandler_write_under_mask_space_config_memory;
+    _datagram.memory_write_under_mask_space_acdi_manufacturer            = &ProtocolConfigMemWriteHandler_write_under_mask_space_acdi_manufacturer;
+    _datagram.memory_write_under_mask_space_acdi_user                    = &ProtocolConfigMemWriteHandler_write_under_mask_space_acdi_user;
+    _datagram.memory_write_under_mask_space_train_function_definition_info = &ProtocolConfigMemWriteHandler_write_under_mask_space_train_function_definition_info;
+    _datagram.memory_write_under_mask_space_train_function_config_memory = &ProtocolConfigMemWriteHandler_write_under_mask_space_train_function_config_memory;
+    _datagram.memory_write_under_mask_space_firmware_upgrade             = &ProtocolConfigMemWriteHandler_write_under_mask_space_firmware;
+
+#endif /* OPENLCB_COMPILE_MEMORY_CONFIGURATION */
+
+    // All remaining fields stay NULL (stream ops, reply handlers, etc.)
 
 }
 
+#endif /* OPENLCB_COMPILE_DATAGRAMS */
+
+    /** @brief Wires all protocol handlers into the main state machine dispatch interface. */
 static void _build_main_statemachine(void) {
 
     memset(&_main_sm, 0, sizeof(_main_sm));
@@ -384,9 +523,13 @@ static void _build_main_statemachine(void) {
     _main_sm.unlock_shared_resources = _config->unlock_shared_resources;
     _main_sm.send_openlcb_msg        = &CanTxStatemachine_send_openlcb_message;
 
+    // Clock access (injected to maintain decoupling)
+    _main_sm.get_current_tick = &OpenLcb_get_global_100ms_tick;
+
     // Library-internal wiring -- always the same
     _main_sm.openlcb_node_get_first    = &OpenLcbNode_get_first;
     _main_sm.openlcb_node_get_next     = &OpenLcbNode_get_next;
+    _main_sm.openlcb_node_is_last      = &OpenLcbNode_is_last;
     _main_sm.load_interaction_rejected = &OpenLcbMainStatemachine_load_interaction_rejected;
 
     // Required Message Network handlers
@@ -412,81 +555,54 @@ static void _build_main_statemachine(void) {
     _main_sm.handle_try_enumerate_next_node               = &OpenLcbMainStatemachine_handle_try_enumerate_next_node;
 
     // SNIP -- always enabled (part of every profile)
-    if (_features & OPENLCB_FEATURE_SNIP) {
+    _main_sm.snip_simple_node_info_request = &ProtocolSnip_handle_simple_node_info_request;
+    _main_sm.snip_simple_node_info_reply   = &ProtocolSnip_handle_simple_node_info_reply;
 
-        _main_sm.snip_simple_node_info_request = &ProtocolSnip_handle_simple_node_info_request;
-        _main_sm.snip_simple_node_info_reply   = &ProtocolSnip_handle_simple_node_info_reply;
+#ifdef OPENLCB_COMPILE_EVENTS
+    _main_sm.event_transport_consumer_identify            = &ProtocolEventTransport_handle_consumer_identify;
+    _main_sm.event_transport_consumer_range_identified    = &ProtocolEventTransport_handle_consumer_range_identified;
+    _main_sm.event_transport_consumer_identified_unknown  = &ProtocolEventTransport_handle_consumer_identified_unknown;
+    _main_sm.event_transport_consumer_identified_set      = &ProtocolEventTransport_handle_consumer_identified_set;
+    _main_sm.event_transport_consumer_identified_clear    = &ProtocolEventTransport_handle_consumer_identified_clear;
+    _main_sm.event_transport_consumer_identified_reserved = &ProtocolEventTransport_handle_consumer_identified_reserved;
+    _main_sm.event_transport_producer_identify            = &ProtocolEventTransport_handle_producer_identify;
+    _main_sm.event_transport_producer_range_identified    = &ProtocolEventTransport_handle_producer_range_identified;
+    _main_sm.event_transport_producer_identified_unknown  = &ProtocolEventTransport_handle_producer_identified_unknown;
+    _main_sm.event_transport_producer_identified_set      = &ProtocolEventTransport_handle_producer_identified_set;
+    _main_sm.event_transport_producer_identified_clear    = &ProtocolEventTransport_handle_producer_identified_clear;
+    _main_sm.event_transport_producer_identified_reserved = &ProtocolEventTransport_handle_producer_identified_reserved;
+    _main_sm.event_transport_identify_dest                = &ProtocolEventTransport_handle_events_identify_dest;
+    _main_sm.event_transport_identify                     = &ProtocolEventTransport_handle_events_identify;
+    _main_sm.event_transport_learn                        = &ProtocolEventTransport_handle_event_learn;
+    _main_sm.event_transport_pc_report                    = &ProtocolEventTransport_handle_pc_event_report;
+    _main_sm.event_transport_pc_report_with_payload       = &ProtocolEventTransport_handle_pc_event_report_with_payload;
+#endif
 
+#ifdef OPENLCB_COMPILE_BROADCAST_TIME
+    _main_sm.broadcast_time_event_handler = &ProtocolBroadcastTime_handle_time_event;
+#endif
 
-    }
+#ifdef OPENLCB_COMPILE_DATAGRAMS
+    _main_sm.datagram                = &ProtocolDatagramHandler_datagram;
+    _main_sm.datagram_ok_reply       = &ProtocolDatagramHandler_datagram_received_ok;
+    _main_sm.datagram_rejected_reply = &ProtocolDatagramHandler_datagram_rejected;
+    _main_sm.load_datagram_rejected  = &ProtocolDatagramHandler_load_datagram_rejected_message;
+#endif
 
-    // Event Transport -- only if EVENTS feature enabled
-    if (_features & OPENLCB_FEATURE_EVENTS) {
-        _main_sm.event_transport_consumer_identify            = &ProtocolEventTransport_handle_consumer_identify;
-        _main_sm.event_transport_consumer_range_identified    = &ProtocolEventTransport_handle_consumer_range_identified;
-        _main_sm.event_transport_consumer_identified_unknown  = &ProtocolEventTransport_handle_consumer_identified_unknown;
-        _main_sm.event_transport_consumer_identified_set      = &ProtocolEventTransport_handle_consumer_identified_set;
-        _main_sm.event_transport_consumer_identified_clear    = &ProtocolEventTransport_handle_consumer_identified_clear;
-        _main_sm.event_transport_consumer_identified_reserved = &ProtocolEventTransport_handle_consumer_identified_reserved;
-        _main_sm.event_transport_producer_identify            = &ProtocolEventTransport_handle_producer_identify;
-        _main_sm.event_transport_producer_range_identified    = &ProtocolEventTransport_handle_producer_range_identified;
-        _main_sm.event_transport_producer_identified_unknown  = &ProtocolEventTransport_handle_producer_identified_unknown;
-        _main_sm.event_transport_producer_identified_set      = &ProtocolEventTransport_handle_producer_identified_set;
-        _main_sm.event_transport_producer_identified_clear    = &ProtocolEventTransport_handle_producer_identified_clear;
-        _main_sm.event_transport_producer_identified_reserved = &ProtocolEventTransport_handle_producer_identified_reserved;
-        _main_sm.event_transport_identify_dest                = &ProtocolEventTransport_handle_events_identify_dest;
-        _main_sm.event_transport_identify                     = &ProtocolEventTransport_handle_events_identify;
-        _main_sm.event_transport_learn                        = &ProtocolEventTransport_handle_event_learn;
-        _main_sm.event_transport_pc_report                    = &ProtocolEventTransport_handle_pc_event_report;
-        _main_sm.event_transport_pc_report_with_payload       = &ProtocolEventTransport_handle_pc_event_report_with_payload;
+#ifdef OPENLCB_COMPILE_TRAIN
+    _main_sm.train_control_command         = &ProtocolTrainHandler_handle_train_command;
+    _main_sm.train_control_reply           = &ProtocolTrainHandler_handle_train_reply;
+    _main_sm.train_emergency_event_handler = &ProtocolTrainHandler_handle_emergency_event;
+#endif
 
-    }
-
-    // Broadcast Time -- only if both EVENTS and BROADCAST_TIME enabled
-    if ((_features & OPENLCB_FEATURE_EVENTS) &&
-        (_features & OPENLCB_FEATURE_BROADCAST_TIME)) {
-        _main_sm.broadcast_time_event_handler = &ProtocolBroadcastTime_handle_time_event;
-
-    }
-
-    // Datagram handler -- only if DATAGRAMS feature enabled
-    if (_features & OPENLCB_FEATURE_DATAGRAMS) {
-        _main_sm.datagram                = &ProtocolDatagramHandler_datagram;
-        _main_sm.datagram_ok_reply       = &ProtocolDatagramHandler_datagram_received_ok;
-        _main_sm.datagram_rejected_reply = &ProtocolDatagramHandler_datagram_rejected;
-
-    }
-
-    // Train -- only if TRAIN feature enabled
-    if (_features & OPENLCB_FEATURE_TRAIN) {
-        _main_sm.train_control_command         = &ProtocolTrainHandler_handle_train_command;
-        _main_sm.train_control_reply           = &ProtocolTrainHandler_handle_train_reply;
-        _main_sm.train_emergency_event_handler = &ProtocolTrainHandler_handle_emergency_event;
-        // simple_train_node_ident_info_request/reply will be wired in Phase 2
-
-    }
-
-    // Train Search -- only if EVENTS + TRAIN + TRAIN_SEARCH enabled
-    if ((_features & OPENLCB_FEATURE_EVENTS) &&
-        (_features & OPENLCB_FEATURE_TRAIN) &&
-        (_features & OPENLCB_FEATURE_TRAIN_SEARCH)) {
-        _main_sm.train_search_event_handler = &ProtocolTrainSearch_handle_search_event;
-
-    }
-
-    // Stream -- only if STREAMS feature enabled
-    // if (_features & OPENLCB_FEATURE_STREAMS) {
-    //
-    //     _main_sm.stream_initiate_request = ...;
-    //     _main_sm.stream_initiate_reply = ...;
-    //     _main_sm.stream_send_data = ...;
-    //     _main_sm.stream_data_proceed = ...;
-    //     _main_sm.stream_data_complete = ...;
-    //
-    // }
+#if defined(OPENLCB_COMPILE_TRAIN) && defined(OPENLCB_COMPILE_TRAIN_SEARCH)
+    _main_sm.train_search_event_handler    = &ProtocolTrainSearch_handle_search_event;
+    _main_sm.train_search_no_match_handler = &ProtocolTrainSearch_handle_search_no_match;
+#endif
 
 }
 
+    /** @brief Wires the CAN send function and config memory callbacks into the application interface. */
 static void _build_application(void) {
 
     memset(&_app, 0, sizeof(_app));
@@ -499,121 +615,98 @@ static void _build_application(void) {
 
 // ---- Public API ----
 
-void OpenLcb_initialize(const openlcb_config_t *config, uint32_t features) {
+    /**
+    * @brief Initializes the entire OpenLCB stack from the user configuration.
+    *
+    * @details Algorithm:
+    * -# Store config pointer
+    * -# Initialize buffer infrastructure (store, list, FIFO)
+    * -# Build all internal interface structs from user config and compile flags
+    * -# Initialize all compiled-in protocol modules in dependency order
+    *
+    * @verbatim
+    * @param config Pointer to the @ref openlcb_config_t to use
+    * @endverbatim
+    */
+void OpenLcb_initialize(const openlcb_config_t *config) {
 
     _config = config;
-    _features = features;
 
     // 1. Buffer infrastructure -- always needed
     OpenLcbBufferStore_initialize();
     OpenLcbBufferList_initialize();
     OpenLcbBufferFifo_initialize();
 
-    // 2. Build all internal interface structs from user config + features
+    // 2. Build all internal interface structs from user config
     _build_node();
     _build_login_message_handler();
     _build_login_statemachine();
     _build_application();
+    _build_snip();
+    _build_msg_network();
 
-    if (_features & OPENLCB_FEATURE_SNIP) {
+#ifdef OPENLCB_COMPILE_EVENTS
+    _build_event_transport();
+#endif
 
-        _build_snip();
+#ifdef OPENLCB_COMPILE_DATAGRAMS
+    _build_datagram_handler();
+#endif
 
-   }
+#ifdef OPENLCB_COMPILE_MEMORY_CONFIGURATION
+    _build_config_mem_read();
+    _build_config_mem_write();
+    _build_config_mem_operations();
+#endif
 
-    if (_features & OPENLCB_FEATURE_EVENTS) {
+#ifdef OPENLCB_COMPILE_BROADCAST_TIME
+    _build_broadcast_time();
+    _build_app_broadcast_time();
+#endif
 
-        _build_event_transport();
+#ifdef OPENLCB_COMPILE_TRAIN
+    _build_train_handler();
+    _build_app_train();
+#endif
 
-    }
+#if defined(OPENLCB_COMPILE_TRAIN) && defined(OPENLCB_COMPILE_TRAIN_SEARCH)
+    _build_train_search_handler();
+#endif
 
-    if (_features & OPENLCB_FEATURE_DATAGRAMS) {
+    _build_main_statemachine();
 
-        _build_datagram_handler();
+    // 3. Initialize modules in dependency order
+    ProtocolSnip_initialize(&_snip);
 
-        if (_features & OPENLCB_FEATURE_CONFIG_MEMORY) {
+#ifdef OPENLCB_COMPILE_DATAGRAMS
+    ProtocolDatagramHandler_initialize(&_datagram);
+#endif
 
-            _build_config_mem_read();
-            _build_config_mem_write();
-            _build_config_mem_operations();
+#ifdef OPENLCB_COMPILE_MEMORY_CONFIGURATION
+    ProtocolConfigMemReadHandler_initialize(&_config_read);
+    ProtocolConfigMemWriteHandler_initialize(&_config_write);
+    ProtocolConfigMemOperationsHandler_initialize(&_config_ops);
+#endif
 
-        }
-
-    }
-
-    if (_features & OPENLCB_FEATURE_BROADCAST_TIME) {
-
-        _build_broadcast_time();
-        _build_app_broadcast_time();
-
-    }
-
-    if (_features & OPENLCB_FEATURE_TRAIN) {
-
-        _build_train_handler();
-        _build_app_train();
-
-    }
-
-    if ((_features & OPENLCB_FEATURE_EVENTS) &&
-        (_features & OPENLCB_FEATURE_TRAIN) &&
-        (_features & OPENLCB_FEATURE_TRAIN_SEARCH)) {
-
-        _build_train_search_handler();
-
-    }
-
-    _build_main_statemachine();  // Uses _features internally to select what to wire
-
-    // 3. Initialize modules in dependency order -- only those that were built
-    if (_features & OPENLCB_FEATURE_SNIP) {
-
-        ProtocolSnip_initialize(&_snip);
-
-    }
-
-    if (_features & OPENLCB_FEATURE_DATAGRAMS) {
-
-        ProtocolDatagramHandler_initialize(&_datagram);
-
-        if (_features & OPENLCB_FEATURE_CONFIG_MEMORY) {
-
-            ProtocolConfigMemReadHandler_initialize(&_config_read);
-            ProtocolConfigMemWriteHandler_initialize(&_config_write);
-            ProtocolConfigMemOperationsHandler_initialize(&_config_ops);
-
-        }
-
-    }
-
-    if (_features & OPENLCB_FEATURE_EVENTS) {
-
-        ProtocolEventTransport_initialize(&_event_transport);
-    }
+#ifdef OPENLCB_COMPILE_EVENTS
+    ProtocolEventTransport_initialize(&_event_transport);
+#endif
 
     ProtocolMessageNetwork_initialize(&_msg_network);
 
-    if (_features & OPENLCB_FEATURE_BROADCAST_TIME) {
+#ifdef OPENLCB_COMPILE_BROADCAST_TIME
+    ProtocolBroadcastTime_initialize(&_broadcast_time);
+    OpenLcbApplicationBroadcastTime_initialize(&_app_broadcast_time);
+#endif
 
-        ProtocolBroadcastTime_initialize(&_broadcast_time);
-        OpenLcbApplicationBroadcastTime_initialize(&_app_broadcast_time);
+#ifdef OPENLCB_COMPILE_TRAIN
+    ProtocolTrainHandler_initialize(&_train_handler);
+    OpenLcbApplicationTrain_initialize(&_app_train);
+#endif
 
-    }
-
-    if (_features & OPENLCB_FEATURE_TRAIN) {
-
-        ProtocolTrainHandler_initialize(&_train_handler);
-        OpenLcbApplicationTrain_initialize(&_app_train);
-
-    }
-
-    if ((_features & OPENLCB_FEATURE_EVENTS) &&
-        (_features & OPENLCB_FEATURE_TRAIN) &&
-        (_features & OPENLCB_FEATURE_TRAIN_SEARCH)) {
-
-        ProtocolTrainSearch_initialize(&_train_search);
-
-    }
+#if defined(OPENLCB_COMPILE_TRAIN) && defined(OPENLCB_COMPILE_TRAIN_SEARCH)
+    ProtocolTrainSearch_initialize(&_train_search);
+#endif
 
     OpenLcbNode_initialize(&_node);
 
@@ -625,16 +718,65 @@ void OpenLcb_initialize(const openlcb_config_t *config, uint32_t features) {
 
 }
 
+    /**
+    * @brief Allocates a node slot and assigns its ID and parameters.
+    *
+    * @verbatim
+    * @param node_id     Unique 48-bit @ref node_id_t for the new node
+    * @param parameters  Pointer to @ref node_parameters_t (SNIP, protocol flags, events)
+    * @endverbatim
+    *
+    * @return Pointer to the allocated @ref openlcb_node_t, or NULL if no slots available
+    */
 openlcb_node_t *OpenLcb_create_node(node_id_t node_id, const node_parameters_t *parameters) {
 
     return OpenLcbNode_allocate(node_id, parameters);
 
 }
 
+    /**
+     * @brief Runs all periodic service tasks from the main loop.
+     *
+     * @details Reads the global clock once and passes it to each module.
+     * All work happens in the main loop context where it is safe to send
+     * messages, free buffers, and call application callbacks.
+     */
+static void _run_periodic_services(void) {
+
+    uint8_t tick = _global_100ms_tick;
+
+    OpenLcbNode_100ms_timer_tick(tick);
+
+#ifdef OPENLCB_COMPILE_DATAGRAMS
+    ProtocolDatagramHandler_100ms_timer_tick(tick);
+    ProtocolDatagramHandler_check_timeouts(tick);
+#endif
+
+#ifdef OPENLCB_COMPILE_BROADCAST_TIME
+    OpenLcbApplicationBroadcastTime_100ms_time_tick(tick);
+#endif
+
+#ifdef OPENLCB_COMPILE_TRAIN
+    OpenLcbApplicationTrain_100ms_timer_tick(tick);
+#endif
+
+}
+
+    /** @brief Runs one iteration of all state machines and periodic services. */
 void OpenLcb_run(void) {
 
     CanMainStateMachine_run();
     OpenLcbLoginMainStatemachine_run();
     OpenLcbMainStatemachine_run();
+
+    _run_periodic_services();
+
+}
+
+    /** @brief Increments the global 100ms tick counter. This is the ONLY action
+     *  performed by the timer interrupt — all real work runs in the main loop. */
+void OpenLcb_100ms_timer_tick(void) {
+
+    _global_100ms_tick++;
 
 }

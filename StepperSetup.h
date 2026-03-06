@@ -6,7 +6,7 @@
     #define STANDARD_STEPPERS_h
 
     // #include <Arduino.h>
-    #include "AccelStepper.h"
+    #include "src/application_drivers/AccelStepper.h"
 
     #define ULN2003_HALF_CW AccelStepper(AccelStepper::HALF4WIRE, A3, A1, A2, A0)
     #define ULN2003_HALF_CCW AccelStepper(AccelStepper::HALF4WIRE, A0, A2, A1, A3)

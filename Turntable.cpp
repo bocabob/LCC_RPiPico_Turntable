@@ -30,7 +30,7 @@
 #include "src/drivers/canbus/can_types.h"
 #include "config_mem_helper.h"
 
-extern openlcb_node_t *NodeParameters_node_id;
+extern openlcb_node_t *OpenLcbUserConfig_node_id;
 
 extern config_mem_t ConfigMemHelper_config_data;
 
@@ -150,7 +150,7 @@ bool lastRunningState;   // Stores last running state to allow turning the stepp
 // 	long trackBack;
 // }
 // TrackAddress;
-TrackAddress Tracks[MAX_TRACKS];
+// TrackAddress Tracks[MAX_TRACKS];
 
 ReferenceStep References[NumberOfReferences];
 
@@ -321,13 +321,13 @@ void moveHome() {   // Function to find the home position.
     lastStep = 0;
     homed = 1;
     Serial.println(F("Turntable homed successfully"));    
-    for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++)
+    for (int i = 0; i < (sizeof(ConfigMemHelper_config_data.Tracks) / sizeof(TrackAddress)); i++)
     { 
     #ifdef USE_SENSORS
-      // LN_STATUS lnStatus = LocoNet.reportSensor(Tracks[i].address,0);    
+      // LN_STATUS lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Tracks[i].address,0);    
       // reportSensor(&LNbus,Tracks[i].address,0);  
       Serial.print(F("Tx:  Sensor Off: "));
-      Serial.println(Tracks[i].address, DEC);
+      Serial.println(ConfigMemHelper_config_data.Tracks[i].address, DEC);
       // Serial.print(F(" Status: "));
       // Serial.println(LocoNet.getStatusStr(lnStatus));   
     #endif       
@@ -424,15 +424,15 @@ void moveToPosition(long steps, uint8_t phaseSwitch) {
 void MoveToTrack(int i,uint8_t Direction){ 
     if (i > MAX_TRACKS) return;
 #ifdef USE_SENSORS      
-      // LN_STATUS lnStatus = LocoNet.reportSensor(Tracks[CurrentTrack].address,0);     
+      // LN_STATUS lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Tracks[CurrentTrack].address,0);     
       // reportSensor(&LNbus,Tracks[CurrentTrack].address,0);       
       Serial.print(F("Tx:  Sensor Off: "));
       Serial.println(CurrentTrack, DEC);
-      // Serial.println(Tracks[CurrentTrack].address, DEC);
+      // Serial.println(ConfigMemHelper_config_data.Tracks[CurrentTrack].address, DEC);
       // Serial.print(F(" Status: "));
       // Serial.println(LocoNet.getStatusStr(lnStatus));
 #endif      
-      lastAddr = Tracks[i].address;
+      lastAddr = ConfigMemHelper_config_data.Tracks[i].address;
       lastDirection = Direction;
       LastTrack = CurrentTrack;
       CurrentTrack = i;
@@ -441,10 +441,10 @@ void MoveToTrack(int i,uint8_t Direction){
       Serial.print(F("Moving to Track : "));
       Serial.println(i, DEC);
 #ifdef USE_SENSORS
-      // lnStatus = LocoNet.reportSensor(Tracks[i].address,1);    
+      // lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Tracks[i].address,1);    
       // reportSensor(&LNbus,Tracks[i].address,1);    
       Serial.print(F("Tx:  Sensor On: "));
-      // Serial.println(Tracks[i].address, DEC);
+      // Serial.println(ConfigMemHelper_config_data.Tracks[i].address, DEC);
       // Serial.print(F(" Status: "));
       // Serial.println(LocoNet.getStatusStr(lnStatus));
 #endif     
@@ -453,21 +453,21 @@ void MoveToTrack(int i,uint8_t Direction){
 #endif
       if (Direction)
       {          
-      //  stepper.moveTo(Tracks[i].trackFront);
-       moveToPosition(Tracks[i].trackFront, Direction);
+      //  stepper.moveTo(ConfigMemHelper_config_data.Tracks[i].trackFront);
+       moveToPosition(ConfigMemHelper_config_data.Tracks[i].trackFront, Direction);
 #ifdef TT_DEBUG        
         Serial.print(F("Moving to Front Position : "));
-        Serial.println(Tracks[i].trackFront, DEC);
+        Serial.println(ConfigMemHelper_config_data.Tracks[i].trackFront, DEC);
 #endif        
  //       break;
       }
       else
       {
-      //  stepper.moveTo(Tracks[i].trackBack);
-       moveToPosition(Tracks[i].trackBack, Direction);
+      //  stepper.moveTo(ConfigMemHelper_config_data.Tracks[i].trackBack);
+       moveToPosition(ConfigMemHelper_config_data.Tracks[i].trackBack, Direction);
 #ifdef TT_DEBUG       
         Serial.print(F("Moving to Back Position : "));
-        Serial.println(Tracks[i].trackBack, DEC);
+        Serial.println(ConfigMemHelper_config_data.Tracks[i].trackBack, DEC);
 #endif          
       }
 }
@@ -605,7 +605,7 @@ void calibration() {
           drawTurnTable();
           drawTracks();
         }
-        ConfigMemHelper_write(NodeParameters_node_id, &ConfigMemHelper_config_data);
+        ConfigMemHelper_write(OpenLcbUserConfig_node_id, &ConfigMemHelper_config_data);
         // writeEEPROM();
       } else { // reference point found, log it
         refCountDec--; // decrement track count
@@ -955,20 +955,20 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
     case 10:      // open all doors 
       // produceOpenAll();    
       // for (int i = 0; i <= trackCount; i++) {
-      // if (Tracks[i].doorPresent) 
+      // if (ConfigMemHelper_config_data.Tracks[i].doorPresent) 
       // {
-      //   // MoveServo(Tracks[i].servoNumber, 32);            
-      //   drawTrack(i,((Tracks[i].trackFront*360)/fullTurnSteps));
+      //   // MoveServo(ConfigMemHelper_config_data.Tracks[i].servoNumber, 32);            
+      //   drawTrack(i,((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
       // }
       // }
       break;
     case 11:      // close all doors 
       // produceCloseAll();
       // for (int i = 0; i <= trackCount; i++) {
-      // if (Tracks[i].doorPresent) 
+      // if (ConfigMemHelper_config_data.Tracks[i].doorPresent) 
       // {
-      //   // MoveServo(Tracks[i].servoNumber, 0);            
-      //   drawTrack(i,((Tracks[i].trackFront*360)/fullTurnSteps));
+      //   // MoveServo(ConfigMemHelper_config_data.Tracks[i].servoNumber, 0);            
+      //   drawTrack(i,((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
       // }
       // }
       break;    
@@ -1000,7 +1000,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       Serial.println(boxCode);
     #endif   
       // writeEEPROM();
-      ConfigMemHelper_write(NodeParameters_node_id, &ConfigMemHelper_config_data);
+      ConfigMemHelper_write(OpenLcbUserConfig_node_id, &ConfigMemHelper_config_data);
       drawDiagnosticPage();
       break;    
     case 18: // settings page
@@ -1131,40 +1131,40 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
         switch (action){
         case 0:
           // decrement address
-          if (Tracks[editTrack].address > 0) --Tracks[editTrack].address ;
+          if (ConfigMemHelper_config_data.Tracks[editTrack].address > 0) --ConfigMemHelper_config_data.Tracks[editTrack].address ;
           break;
         case 1:
           // increment address
-          // if (Tracks[editTrack].address < MaxDCCaddress) ++Tracks[editTrack].address;
+          // if (ConfigMemHelper_config_data.Tracks[editTrack].address < MaxDCCaddress) ++Tracks[editTrack].address;
           break;
         case 2:
           // decrement step position
-          if (Tracks[editTrack].trackFront > 0) {
-            --Tracks[editTrack].trackFront;
-            --Tracks[editTrack].trackBack;
+          if (ConfigMemHelper_config_data.Tracks[editTrack].trackFront > 0) {
+            --ConfigMemHelper_config_data.Tracks[editTrack].trackFront;
+            --ConfigMemHelper_config_data.Tracks[editTrack].trackBack;
           }
           break;
         case 3:
           // increment step position
-          if (Tracks[editTrack].trackFront < fullTurnSteps) {
-            ++Tracks[editTrack].trackFront;
-            ++Tracks[editTrack].trackBack;
+          if (ConfigMemHelper_config_data.Tracks[editTrack].trackFront < fullTurnSteps) {
+            ++ConfigMemHelper_config_data.Tracks[editTrack].trackFront;
+            ++ConfigMemHelper_config_data.Tracks[editTrack].trackBack;
           }
           break;
         case 4:
           // toggle door presence to track w/redraw
-          if (Tracks[editTrack].doorPresent)
-          {Tracks[editTrack].doorPresent = false;}
+          if (ConfigMemHelper_config_data.Tracks[editTrack].doorPresent)
+          {ConfigMemHelper_config_data.Tracks[editTrack].doorPresent = false;}
           else
-          {Tracks[editTrack].doorPresent = true;}
+          {ConfigMemHelper_config_data.Tracks[editTrack].doorPresent = true;}
           break;
         case 5:
           // decrement servo number
-          if (Tracks[editTrack].servoNumber > 0) --Tracks[editTrack].servoNumber ;
+          if (ConfigMemHelper_config_data.Tracks[editTrack].servoNumber > 0) --ConfigMemHelper_config_data.Tracks[editTrack].servoNumber ;
           break;
         case 6:
           // increment servo number
-          // if (Tracks[editTrack].servoNumber < i_max_servo) ++Tracks[editTrack].servoNumber;
+          // if (ConfigMemHelper_config_data.Tracks[editTrack].servoNumber < i_max_servo) ++Tracks[editTrack].servoNumber;
           break;
         default:
           // statements
@@ -1241,14 +1241,14 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
               break;
             case 2:
               // toggle door to track w/redraw
-              if (Tracks[track].doorPresent) 
+              if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
               {
-                // produceDoor(Tracks[track].servoNumber);
+                // produceDoor(ConfigMemHelper_config_data.Tracks[track].servoNumber);
                 // if (Servos[Tracks[track].servoNumber].Status)
-                // {              MoveServo(Tracks[track].servoNumber, 0);            }
+                // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            }
                 // else
-                // {              MoveServo(Tracks[track].servoNumber, 32);            }
-                drawTrack(track,((Tracks[track].trackFront*360)/fullTurnSteps));
+                // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            }
+                drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
               }
               break;
             default:
@@ -1278,15 +1278,15 @@ void setTrack(int track, long position, bool reverse)
 { if ((track >= 0) && (track < NUM_TRACKS)) {
     position = absPosition(position);
     if (reverse) {      
-      Tracks[track].trackBack = position;
+      ConfigMemHelper_config_data.Tracks[track].trackBack = position;
     } 
     else {
-      Tracks[track].trackFront = position;
+      ConfigMemHelper_config_data.Tracks[track].trackFront = position;
       if (position > halfTurnSteps) {  
-        Tracks[track].trackBack = position - halfTurnSteps;
+        ConfigMemHelper_config_data.Tracks[track].trackBack = position - halfTurnSteps;
       }
       else {
-        Tracks[track].trackBack = position + halfTurnSteps;
+        ConfigMemHelper_config_data.Tracks[track].trackBack = position + halfTurnSteps;
       }
     }
   }  
@@ -1300,76 +1300,76 @@ void setReferences(int spot, long position, bool reverse)
 }
 void setTrackDefaults()
 {
-  for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
-      // Tracks[i].address = TrackStartAddress - 1 + i;
-      Tracks[i].trackFront = 0;
-      Tracks[i].trackBack = (FULL_TURN_STEPS / 2);
-      Tracks[i].doorPresent = false;
-      Tracks[i].servoNumber = 0;
+  for (int i = 0; i < (sizeof(ConfigMemHelper_config_data.Tracks) / sizeof(TrackAddress)); i++) {
+      // ConfigMemHelper_config_data.Tracks[i].address = TrackStartAddress - 1 + i;
+      ConfigMemHelper_config_data.Tracks[i].trackFront = 0;
+      ConfigMemHelper_config_data.Tracks[i].trackBack = (FULL_TURN_STEPS / 2);
+      ConfigMemHelper_config_data.Tracks[i].doorPresent = false;
+      ConfigMemHelper_config_data.Tracks[i].servoNumber = 0;
     }
-  for (int i = 4; i < (sizeof(Tracks) / sizeof(TrackAddress)-1); i++) {
-      Tracks[i].doorPresent = true;
-      // Tracks[i].servoNumber = (i-4) % i_max_servo;
+  for (int i = 4; i < (sizeof(ConfigMemHelper_config_data.Tracks) / sizeof(TrackAddress)-1); i++) {
+      ConfigMemHelper_config_data.Tracks[i].doorPresent = true;
+      // ConfigMemHelper_config_data.Tracks[i].servoNumber = (i-4) % i_max_servo;
     }
   trackCount = NUM_TRACKS;
   
   homeTrack = 3;
 	// track zero is the position of the homing sensor
-	// Tracks[1].address = 500; // TrackStartAddress
-	Tracks[1].trackFront = absPosition(entryTrack1);
-	Tracks[1].trackBack = absPosition(entryTrack1 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[1].address = 500; // TrackStartAddress
+	ConfigMemHelper_config_data.Tracks[1].trackFront = absPosition(entryTrack1);
+	ConfigMemHelper_config_data.Tracks[1].trackBack = absPosition(entryTrack1 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[2].address = 501;
-	Tracks[2].trackFront = absPosition(entryTrack2);
-	Tracks[2].trackBack = absPosition(entryTrack2 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[2].address = 501;
+	ConfigMemHelper_config_data.Tracks[2].trackFront = absPosition(entryTrack2);
+	ConfigMemHelper_config_data.Tracks[2].trackBack = absPosition(entryTrack2 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[3].address = 502;
-	Tracks[3].trackFront = absPosition(entryTrack3);
-	Tracks[3].trackBack = absPosition(entryTrack3 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[3].address = 502;
+	ConfigMemHelper_config_data.Tracks[3].trackFront = absPosition(entryTrack3);
+	ConfigMemHelper_config_data.Tracks[3].trackBack = absPosition(entryTrack3 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[4].address = 503;
-	Tracks[4].trackFront = absPosition(houseTrack1);
-	Tracks[4].trackBack = absPosition(houseTrack1 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[4].address = 503;
+	ConfigMemHelper_config_data.Tracks[4].trackFront = absPosition(houseTrack1);
+	ConfigMemHelper_config_data.Tracks[4].trackBack = absPosition(houseTrack1 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[5].address = 504;
-	Tracks[5].trackFront = absPosition(houseTrack2);
-	Tracks[5].trackBack = absPosition(houseTrack2 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[5].address = 504;
+	ConfigMemHelper_config_data.Tracks[5].trackFront = absPosition(houseTrack2);
+	ConfigMemHelper_config_data.Tracks[5].trackBack = absPosition(houseTrack2 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[6].address = 505;
-	Tracks[6].trackFront = absPosition(houseTrack3);
-	Tracks[6].trackBack = absPosition(houseTrack3 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[6].address = 505;
+	ConfigMemHelper_config_data.Tracks[6].trackFront = absPosition(houseTrack3);
+	ConfigMemHelper_config_data.Tracks[6].trackBack = absPosition(houseTrack3 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[7].address = 506;
-	Tracks[7].trackFront = absPosition(houseTrack4);
-	Tracks[7].trackBack = absPosition(houseTrack4 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[7].address = 506;
+	ConfigMemHelper_config_data.Tracks[7].trackFront = absPosition(houseTrack4);
+	ConfigMemHelper_config_data.Tracks[7].trackBack = absPosition(houseTrack4 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[8].address = 507;
-	Tracks[8].trackFront = absPosition(houseTrack5);
-	Tracks[8].trackBack = absPosition(houseTrack5 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[8].address = 507;
+	ConfigMemHelper_config_data.Tracks[8].trackFront = absPosition(houseTrack5);
+	ConfigMemHelper_config_data.Tracks[8].trackBack = absPosition(houseTrack5 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[9].address = 508;
-	Tracks[9].trackFront = absPosition(houseTrack6);
-	Tracks[9].trackBack = absPosition(houseTrack6 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[9].address = 508;
+	ConfigMemHelper_config_data.Tracks[9].trackFront = absPosition(houseTrack6);
+	ConfigMemHelper_config_data.Tracks[9].trackBack = absPosition(houseTrack6 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[10].address = 509;
-	Tracks[10].trackFront = absPosition(houseTrack7);
-	Tracks[10].trackBack = absPosition(houseTrack7 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[10].address = 509;
+	ConfigMemHelper_config_data.Tracks[10].trackFront = absPosition(houseTrack7);
+	ConfigMemHelper_config_data.Tracks[10].trackBack = absPosition(houseTrack7 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[11].address = 510;
-	Tracks[11].trackFront = absPosition(houseTrack8);
-	Tracks[11].trackBack = absPosition(houseTrack8 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[11].address = 510;
+	ConfigMemHelper_config_data.Tracks[11].trackFront = absPosition(houseTrack8);
+	ConfigMemHelper_config_data.Tracks[11].trackBack = absPosition(houseTrack8 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[12].address = 511;
-	Tracks[12].trackFront = absPosition(houseTrack9);
-	Tracks[12].trackBack = absPosition(houseTrack9 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[12].address = 511;
+	ConfigMemHelper_config_data.Tracks[12].trackFront = absPosition(houseTrack9);
+	ConfigMemHelper_config_data.Tracks[12].trackBack = absPosition(houseTrack9 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[13].address = 512;
-	Tracks[13].trackFront = absPosition(houseTrack10);
-	Tracks[13].trackBack = absPosition(houseTrack10 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[13].address = 512;
+	ConfigMemHelper_config_data.Tracks[13].trackFront = absPosition(houseTrack10);
+	ConfigMemHelper_config_data.Tracks[13].trackBack = absPosition(houseTrack10 + (FULL_TURN_STEPS / 2));
 
-	// Tracks[14].address = 513;
-	Tracks[14].trackFront = absPosition(houseTrack11);
-	Tracks[14].trackBack = absPosition(houseTrack11 + (FULL_TURN_STEPS / 2));
+	// ConfigMemHelper_config_data.Tracks[14].address = 513;
+	ConfigMemHelper_config_data.Tracks[14].trackFront = absPosition(houseTrack11);
+	ConfigMemHelper_config_data.Tracks[14].trackBack = absPosition(houseTrack11 + (FULL_TURN_STEPS / 2));
 }
 
 // void setServoDefaults()

@@ -1,22 +1,28 @@
 {
     "configurations": [
         {
-            "name": "Win32",
+            "name": "RPi Pico (RP2040)",
             "includePath": [
                 "${workspaceRoot}/src/**",
                 "${workspaceFolder}/**",
                 "C:/GdriveBG/Arduino/libraries/**",
-                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/**"
+                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/packages/rp2040/hardware/rp2040/**",
+                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/packages/rp2040/tools/**",
+                // "C:/Program Files/Arduino IDE/hardware/**",
+                // "C:/Program Files/Arduino IDE/libraries/**"
+                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/libraries/**"
             ],
             "defines": [
-                "_DEBUG",
-                "UNICODE",
-                "_UNICODE"
+                "ARDUINO=10819",
+                "ARDUINO_ARCH_RP2040",
+                "ARDUINO_BOARD=Raspberry_Pi_Pico",
+                "__RP2040__",
+                "F_CPU=125000000L"
             ],
-            // "compilerPath": "C:\\Program Files\\Arduino IDE\\Arduino IDE.exe",
-            "cStandard": "c11",
-            "cppStandard": "c++17",
-            "intelliSenseMode": "clang-x64"
+            // "compilerPath": "arm-none-eabi-gcc",
+            "cStandard": "gnu17",
+            "cppStandard": "gnu++17",
+            "intelliSenseMode": "gcc-arm"
         }
     ],
     "version": 4

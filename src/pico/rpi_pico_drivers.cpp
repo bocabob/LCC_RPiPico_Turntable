@@ -36,8 +36,6 @@
 
 #include "rpi_pico_drivers.h"
 #include "rpi_pico_can_drivers.h"
-#include "../openlcb/openlcb_application_broadcast_time.h"
-#include "../openlcb/protocol_broadcast_time_handler.h"
 
 #include "../../BoardSettings.h"
 
@@ -56,11 +54,10 @@
 
 #endif  // ARDUINO_COMPATIBLE
 
+#include "../openlcb/openlcb_config.h"
 #include "../openlcb/openlcb_types.h"
 #include "../openlcb/openlcb_defines.h"
 #include "../utilities/mustangpeak_string_helper.h"
-#include "../openlcb/openlcb_node.h"
-#include "../openlcb/protocol_datagram_handler.h"
 
 #include "Wire.h"
 /*
@@ -107,10 +104,8 @@ static bool timer_unhandled_tick = false;
 
 void _handle_timer_tick(void) {
 
-  OpenLcbApplicationBroadcastTime_100ms_time_tick();
+  OpenLcb_100ms_timer_tick();
 
-  OpenLcbNode_100ms_timer_tick();
-  ProtocolDatagramHandler_100ms_timer_tick();
 }
 
 bool timer_task_or_interrupt(__unused struct repeating_timer *timer) {
