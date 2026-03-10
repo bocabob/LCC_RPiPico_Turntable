@@ -1,7 +1,14 @@
 #ifndef version_h
 #define version_h
 
-#define VERSION "LCC 0.8.5"
+#define VERSION "LCC 0.8.6"
+// LCC 0.8.6
+/*
+changed LCC library to OpenLcbClib 
+split node into two separate nodes for turntable and roundhouse to separate timing critical turntable functions from roundhouse functions that are not timing critical
+implement CDI changes for separate nodes and configuration memory
+prepare for future addition of roundhouse functions and GUI elements
+*/
 // LCC 0.8.0
 /*
 changed to LCC from LocoNet

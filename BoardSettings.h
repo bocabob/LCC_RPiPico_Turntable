@@ -1,5 +1,6 @@
 /*
  *  This is the configuration file for the Raspberry Pi Pico node hardware.
+    defines and constants
  */
 
 // Configureation settings
@@ -29,8 +30,8 @@
 // -------------------------------------------
 // Select ONE of these for Configuration Memory Size
 // --------------------------------------------
-#define CONFIG_MEM_SIZE      65536
-// #define CONFIG_MEM_SIZE      32768
+// #define CONFIG_MEM_SIZE      65536
+#define CONFIG_MEM_SIZE      32768
 //#define CONFIG_MEM_SIZE      16384
 //#define CONFIG_MEM_SIZE      8192
 //#define CONFIG_MEM_SIZE      4096
@@ -59,7 +60,7 @@
 // #define I2C_ADDRESS 0x60 
 // #define KEYPAD_ADDRESS 0x20
 // #define DISPLAY_ADDRESS 0x3C
-#define SERVO_ADDRESS 0x40
+// #define SERVO_ADDRESS 0x40
 // #define EEPROM_ADDRESS 0x50
 #define STORAGE_ADDR 0x50  // 0x50 is the default address!
 #define STOR_WIRE Wire1     // make Wire1 or Wire
@@ -163,7 +164,7 @@ const uint8_t PixelPin = NeoPixel_PinA;  // pin for the data line, ignored for E
 #define Light_B 0
 
 #define MAX_TRACKS 20
-#define NUM_TRACKS 14 // Define number of turntable tracks for default / max, includes non-track zero position for home sensor
+#define NUM_TRACKS 15 // Define number of turntable tracks for default / max, includes non-track zero position for home sensor
 #define MAX_DOORS 16
 #define NUM_DOORS 10
 

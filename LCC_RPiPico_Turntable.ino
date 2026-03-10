@@ -89,6 +89,7 @@ Other pins for relays and LEDs may be used.
 #include <TFT_eSPI.h>      // Hardware-specific library
 // Include local files
 #include "Turntable.h"
+#include "src/application_drivers/AccelStepper.h"
 #include "UserInterface.h"
 
 // #define NODE_ID 0x050101010777
@@ -101,6 +102,7 @@ Other pins for relays and LEDs may be used.
 // extern AccelStepper stepper;
 extern bool lastRunningState;   // Stores last running state to allow turning the stepper off after moves.
 
+extern AccelStepper stepper;
 extern bool isStepperRunning();
 extern long getCurrentPosition();
 extern void runStepper();
@@ -160,7 +162,6 @@ void _check_for_nvm_initialization(void) {
     Serial.println("Configuration Memory has been previously initalized");
 
   }
-
 }
 
 void _register_producers(void) {
@@ -259,7 +260,10 @@ void setup() {
   Serial.println("Loading NVM values into Config Mem data variable");
   ConfigMemHelper_read(OpenLcbUserConfig_node_id, &ConfigMemHelper_config_data);
   Serial.println("Data variable loaded and ready for use");
+  // TODO: need to load track variables and door variables into the local data structures as well for use in the program, or read from the NVM when needed.  The latter is simpler but less efficient.  The former is more efficient but more complex to implement and maintain.  For now, we will read from the NVM when needed.
   
+  // Load_application_defaults(OpenLcbUserConfig_node_id);
+
   // initStringFlags();
   // SetupPixels();
   // InitialzePixels();  // TODO: JDK THIS CAUSED A HANG ON MY BOARD.... 
@@ -318,21 +322,21 @@ void setup1() {
   if (fullTurnSteps == 0)
   {
     fullTurnSteps = FULL_TURN_STEPS;
-    setTrackDefaults();
+    // setTrackDefaults();
     // setServoDefaults();
   }
   halfTurnSteps = fullTurnSteps / 2;  
 
   // if (!calibrating ) {
-    // calibrating = true;
-    // calibrationPhase = 3;
-    // stepper.enableOutputs();
-    // stepper.moveTo(fullTurnSteps);
-    // lastTarget = fullTurnSteps;
-    // Serial.print(calibrating);
-    // Serial.print(F(" calibrating   "));
-    // Serial.print(fullTurnSteps);
-    // Serial.println(F(" steps per revolution"));
+  //   calibrating = true;
+  //   calibrationPhase = 3;
+  //   stepper.enableOutputs();
+  //   stepper.moveTo(fullTurnSteps);
+  //   lastTarget = fullTurnSteps;
+  //   Serial.print(calibrating);
+  //   Serial.print(F(" calibrating   "));
+  //   Serial.print(fullTurnSteps);
+  //   Serial.println(F(" steps per revolution"));
   // }
 
 // #ifndef SENSOR_TESTING  // If we're not sensor testing, start Wire()
@@ -368,9 +372,9 @@ void setup1() {
     homed = 0;
     initiateHoming();
     // below was commented out
-    // calibrating = true;
-    // calibrationPhase = 1;
-    // moveHome();
+    calibrating = true;
+    calibrationPhase = 1;
+    moveHome();
 
     // Serial.println(F("Setup initial homing..."));
     // stepper.enableOutputs();
@@ -386,7 +390,6 @@ void loop() {
   if (Serial.available()) {
 
     switch (Serial.read()) {
-
       case 'h':
         Serial.println("'h': Help");
         Serial.println("'c': Setting NVM to 0x00");
@@ -426,15 +429,16 @@ void loop() {
           Serial.println("Not Logging Access");
         }
       break;
-      case 'q':
-        OpenLcbApplicationBroadcastTime_send_query(OpenLcbUserConfig_node_id, BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
-      break;
-      case 't':    
-        broadcast_clock_state_t* clock = OpenLcbApplicationBroadcastTime_get_clock(BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
-
-        // clock->is_running = true;
-
-        printf("Current time: %02d:%02d\n", clock->time.hour, clock->time.minute);  
+      // case 'q':
+      //   OpenLcbApplicationBroadcastTime_send_query(OpenLcbUserConfig_node_id, BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
+      // break;
+      // case 't':    
+      //   broadcast_clock_state_t* clock = OpenLcbApplicationBroadcastTime_get_clock(BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
+      //   // clock->is_running = true;
+      //   printf("Current time: %02d:%02d\n", clock->time.hour, clock->time.minute);  
+      // break;
+      case 'x':      
+       Load_application_defaults(OpenLcbUserConfig_node_id);
       break;
     };  
   }
@@ -461,19 +465,19 @@ void loop1() {
   // ProcessPixels();
   
     
-    // if (calibrating) calibration();    // If flag is set for calibrating, do it.
-    // else
-    // { 
-    //   if (homed == 0)  moveHome();      // If we haven't successfully homed yet, do it.
-    //   else
-    //   {
-    //     if (!isStepperRunning() && (getCurrentPosition() == 0)) MoveToTrack(homeTrack,BridgeOrientation);
-    //     positionCheck();
-    //   }
-    // }  
+    if (calibrating) calibration();    // If flag is set for calibrating, do it.
+    else
+    { 
+      if (homed == 0)  moveHome();      // If we haven't successfully homed yet, do it.
+      else
+      {
+        if (!isStepperRunning() && (getCurrentPosition() == 0)) MoveToTrack(homeTrack,ConfigMemHelper_config_data.BridgeOrientation);
+        positionCheck();
+      }
+    }  
 
 
-    // runStepper();    // Process the stepper object continuously.
+    runStepper();    // Process the stepper object continuously.
 
 
     // processLED();   // Process our LED.

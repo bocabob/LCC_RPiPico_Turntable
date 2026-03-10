@@ -158,7 +158,7 @@ void TurntableCallback(uint16_t callin) {
       // toggle door to track w/redraw
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
-        // if (Servos[Tracks[track].servoNumber].Status)
+        // if (Servos[ConfigMemHelper_config_data.Tracks[track].servoNumber].Status)
         // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            }
         // else
         // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            }
@@ -322,7 +322,7 @@ void drawHomePage()
   drawButton(13,butLen,Lcol,row,TFT_GREEN,"Diagnostics"); // go to diagnostics page
   // drawButton(12,butLen,Lcol,row,TFT_GREEN,"Settings");  // go to settings page
   row = row + vSpace;
-  // drawButton(18,butLen,Lcol,row,TFT_GREEN,"Configuration"); // go to config page
+  drawButton(18,butLen,Lcol,row,TFT_GREEN,"Button Page"); // go to button page
   // drawButton(18,butLen,Lcol,row,TFT_GREEN,"Configuration"); // go to config page
   row = row + vSpace;
   drawButton(3,90,Lcol,row,TFT_GREEN,"Configure");  // run configuration routine
@@ -356,42 +356,68 @@ void drawButtonPage()
   int col = 5;
   int hSpace = (HRES / 6);
   int vSpace = 40;
-  int row = VRES - (vSpace * 1);
+  int row = VRES - (vSpace * 3);
   // Clear the screen
   tft.fillScreen(TFT_BLACK);
   drawButton(14,butLen,col,row,TFT_GREEN,"TurnTable");  // go to home page
-  col = col + hSpace;
-  drawButton(12,butLen,col,row,TFT_GREEN,"Settings");  // go to settings page
-  col = col + hSpace;
-  drawButton(18,butLen,col,row,TFT_GREEN,"Configuration"); // go to config page
+  // col = col + hSpace;
+  // drawButton(12,butLen,col,row,TFT_GREEN,"Settings");  // go to settings page
+  // col = col + hSpace;
+  // drawButton(18,butLen,col,row,TFT_GREEN,"Configuration"); // go to config page
   col = col + hSpace;  
-  drawButton(13,butLen,col,row,TFT_GREEN,"Diagnostics"); // go to diagnostics page
+  drawButton(4,butLen,col,row,TFT_GREEN,"Re-Home");  // run find home routine
+  col = col + 2*hSpace;  
+  drawButton(9,butLen,col,row,TFT_GREEN,"Increment");  // move to next track
+  col = col + hSpace;  
+  drawButton(10,butLen,col,row,TFT_GREEN,"Open All");  // open all doors
+  col = col + hSpace;  
+  drawButton(8,butLen,col,row,TFT_GREEN,"RH Exterior");  // toggle RH exterior light
 
-  butLen = 18;
+  row = VRES - (vSpace * 2);
   col = 5;
-  row = 20;
+  drawButton(13,butLen,col,row,TFT_GREEN,"Diagnostics"); // go to diagnostics page
+  col = col + 3*hSpace;  
+  drawButton(5,butLen,col,row,TFT_GREEN,"Decrement");  // move one track back
+  col = col + hSpace;  
+  drawButton(11,butLen,col,row,TFT_GREEN,"Close All"); // close all doors
+  col = col + hSpace; 
+  drawButton(7,butLen,col,row,TFT_GREEN,"RH Interior");  // toggle RH interior light
+  row = VRES - vSpace; 
+  drawButton(6,250,((HRES/2)-375),row,TFT_GREEN,"Clockwise Bump Bar");  // execute bump bar routine
+  drawButton(6,250,((HRES/2)+125),row,TFT_GREEN,"Counterclockwise Bump Bar");  // execute bump bar routine
+  setHotSpot(6, 1, row, HRES - 2, row + 23);
+
+  butLen = 60;
+  // col = 10;
+  row = 10;
   int box = TrackBox;
-  char buttonText[12] = "";
+  // char buttonText[12] = "";
   // tft.setTextColor(TFT_BLUE);
   tft.setTextDatum(MC_DATUM);  // Set text plotting reference datum to Middle Center 
   tft.setTextPadding(tft.textWidth("99", 2)); // get the width of the text in pixels
+  // tft.drawString(" ", 0, 0, 2); 
   // tft.setTextColor(TFT_WHITE);
-  for (int track = 1; track <= trackCount; track++) {
+  for (int track = 1; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
     box = (TrackBox +(track*3));
-    row = (track % 10) * vSpace;
-    col = (HRES / 2) * (int)(track / 10);
-    // buttonText[12] = " "; 
-    strcat(buttonText, TrackTag[track]); strcat(buttonText," Fnt");
-    drawButton(box,butLen,col,row,TFT_BLUE,buttonText);  // track button
-    // buttonText[12] = " "; 
-    strcat(buttonText, TrackTag[track]); strcat(buttonText," Bck");
-    drawButton(box+1,butLen,col+20,row,TFT_YELLOW,buttonText);  // track button
+    row = 1 + ((track-1) % 9) * vSpace;
+    col = 5 + (HRES / 2) * (int)((track-1) / 9);
+    tft.drawString(TrackName[track], col+60, row+6, 2);  // draw the name of the track
+    // tft.drawString(TrackTag[track], col+15, row, 2);  // draw the tag of the track
+    col = col + 140;
+    // buttonText[12] = '\0'; // null terminate the string
+    // strcat(buttonText, TrackTag[track]); 
+    // strcat(buttonText,"Front");
+    drawButton(box,butLen,col,row,TFT_BLUE,"Front");  // track button
+    // buttonText[12] = '\0'; // null terminate the string
+    // strcat(buttonText, TrackTag[track]); 
+    // strcat(buttonText,"Back");
+    drawButton(box+1,butLen,col+butLen+10,row,TFT_YELLOW,"Back");  // track button
     if (ConfigMemHelper_config_data.Tracks[track].doorPresent) {
-    // buttonText[12] = " "; 
-      strcat(buttonText, TrackTag[track]); strcat(buttonText," Door");
-      drawButton(box+2,butLen,col+40,row,TFT_GREEN,buttonText);  // track button      
-    }
-    
+    // buttonText[12] = '\0'; // null terminate the string
+      // strcat(buttonText, TrackTag[track]); 
+      // strcat(buttonText,"Door");
+      drawButton(box+2,butLen,col+butLen+butLen+20,row,TFT_GREEN,"Door");  // track button      
+    }    
   }
 }
 
@@ -400,8 +426,8 @@ void drawDiagnosticPage()
 {
   activeScreen = 4;
   int butLen = 90;
-  int col = 5;
-  int hSpace = (HRES / 4);
+  int hSpace = (HRES / 6);
+  int col = hSpace*3;
   int vSpace = 40;
   int row = VRES - (vSpace * 1);
   // Clear the screen
@@ -410,13 +436,13 @@ void drawDiagnosticPage()
   col = col + hSpace;
   drawButton(12,butLen,col,row,TFT_GREEN,"Settings");  // go to settings page
   col = col + hSpace;
-  drawButton(18,butLen,col,row,TFT_GREEN,"Configuration"); // go to config page
+  drawButton(18,butLen,col,row,TFT_GREEN,"Buttons"); // go to config page
 
   drawDiagnostics();
-  drawTrackMatrix();
+  listServos(0);
+  listReverences(0);
   tft.setCursor((HRES/2)+50, 0, 2);
-  listServos();
-  listReverences();
+  drawTrackMatrix((HRES/2)+50);
 }
 
 
@@ -438,9 +464,9 @@ void drawDiagnostics()
   tft.println(LastTrack);
   
   tft.print(F("Current Track is  ")); 
-  tft.print(TrackName[CurrentTrack]);
+  tft.print(TrackName[ConfigMemHelper_config_data.CurrentTrack]);
   tft.print(F(" # "));
-  tft.print(CurrentTrack);
+  tft.print(ConfigMemHelper_config_data.CurrentTrack);
   tft.print(F(" @ step  ")); 
   tft.println(getCurrentPosition());
   
@@ -450,41 +476,42 @@ void drawDiagnostics()
   tft.println(homeTrack);
   
   tft.print(F("Number of tracks set is  ")); 
-  tft.println(trackCount);  
+  tft.println(ConfigMemHelper_config_data.attributes.TrackCount);  
 
   tft.print(F("Number of reference points detected is  ")); 
-  tft.println(refCount);  
+  tft.println(ConfigMemHelper_config_data.attributes.ReferenceCount);  
   
 }
 
-void drawTrackMatrix()
+void drawTrackMatrix(int col)
 {
   
   tft.setTextDatum(TL_DATUM); // Top Left is datum
   tft.println(F("Track Settings ")); 
   tft.println(F("Address   Front   Back   Door Present   Door Servo")); 
-  tft.setCursor(5, tft.getCursorY()+10);
+  tft.setCursor(col+5, tft.getCursorY()+10);
   tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
-  for (int i = 0; i < (sizeof(ConfigMemHelper_config_data.Tracks) / sizeof(TrackAddress)); i++) {
-  tft.setCursor(15, tft.getCursorY());
+  // for (int i = 0; i < (sizeof(ConfigMemHelper_config_data.Tracks) / sizeof(TrackAddress)); i++) {
+  for (int i = 0; i <= (ConfigMemHelper_config_data.attributes.TrackCount); i++) {
+  tft.setCursor(col+15, tft.getCursorY());
   tft.print(ConfigMemHelper_config_data.Tracks[i].address );
-  tft.setCursor(70,tft.getCursorY());
+  tft.setCursor(col+70,tft.getCursorY());
   tft.print(ConfigMemHelper_config_data.Tracks[i].trackFront);
-  tft.setCursor(140,tft.getCursorY());
+  tft.setCursor(col+140,tft.getCursorY());
   tft.print(ConfigMemHelper_config_data.Tracks[i].trackBack);
-  tft.setCursor(210,tft.getCursorY());
+  tft.setCursor(col+210,tft.getCursorY());
   tft.print(ConfigMemHelper_config_data.Tracks[i].doorPresent);
-  tft.setCursor(280,tft.getCursorY());
+  tft.setCursor(col+280,tft.getCursorY());
   tft.println(ConfigMemHelper_config_data.Tracks[i].servoNumber);
     }
 }
 
-void listServos()
+void listServos(int col)
 {
   tft.setTextDatum(TL_DATUM); // Top Left is datum
-  tft.setCursor((HRES/2), tft.getCursorY());
+  tft.setCursor(col, tft.getCursorY());
   tft.println(F("Servo Settings ")); 
-  tft.setCursor((HRES/2), tft.getCursorY());
+  tft.setCursor(col, tft.getCursorY());
   tft.println(F("Address   Minimum   Maximum   Door position")); 
   tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
   // for (int i = 0; i < (sizeof(Servos) / sizeof(ServoAddress)); i++) {
@@ -499,21 +526,21 @@ void listServos()
   //   }
 }
 
-void listReverences()
+void listReverences(int col)
 {
   tft.setTextDatum(TL_DATUM); // Top Left is datum
-  tft.setCursor((HRES/2), tft.getCursorY()+10);
+  tft.setCursor(col, tft.getCursorY()+10);
   tft.println(F("Reference Points ")); 
-  tft.setCursor((HRES/2), tft.getCursorY());
+  tft.setCursor(col, tft.getCursorY());
   tft.println(F("Number  Forward steps   Reverse steps")); 
   tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
   for (int i = 0; i < (sizeof(References) / sizeof(ReferenceStep)); i++) {
-  tft.setCursor((HRES/2)+25, tft.getCursorY());
+  tft.setCursor(col+25, tft.getCursorY());
   tft.print(i);
-  tft.setCursor((HRES/2)+70,tft.getCursorY());
-  tft.print(References[i].stepsForward);
-  tft.setCursor((HRES/2)+180,tft.getCursorY());
-  tft.println(References[i].stepsReverse);
+  tft.setCursor(col+70,tft.getCursorY());
+  tft.print(ConfigMemHelper_config_data.References[i].stepsForward);
+  tft.setCursor(col+180,tft.getCursorY());
+  tft.println(ConfigMemHelper_config_data.References[i].stepsReverse);
     }
 }
 
@@ -607,7 +634,7 @@ setHotSpot8(2,CPtShackX, CPtShackY, SPt1X, SPt1Y,SPt2X, SPt2Y, SPt3X, SPt3Y);
 
 tft.setTextDatum(ML_DATUM);  // Set text plotting reference datum to Middle Left 
 tft.setTextPadding(tft.textWidth("9999999999999999999999999", 2)); // get the width of the text in pixels
-tft.drawString(TrackName[CurrentTrack], 80, VRES/2, 2);  // draw the name of the track
+tft.drawString(TrackName[ConfigMemHelper_config_data.CurrentTrack], 80, VRES/2, 2);  // draw the name of the track
 
 }
 
@@ -647,7 +674,7 @@ if (pixelsOn)
 
 void drawTracks()
 {
-  for (int i = 1; i <= trackCount; i++) {
+  for (int i = 1; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
     drawTrack(i,((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
     // Serial.print(i);
     // Serial.print("  ");
@@ -737,7 +764,7 @@ void drawTrack(int track, float angle)
 
 // need to integrate with door state determined by events consumed from other node
 
-    // if (Servos[Tracks[track].servoNumber].Status)
+    // if (Servos[ConfigMemHelper_config_data.Tracks[track].servoNumber].Status)
     //     {
     //     tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_GREEN);
     //     }

@@ -84,7 +84,8 @@ typedef struct{
     event_id_t eidLowLuminosity_On;       // consumer turn Group 0 ON eventID
   } attributes;
   
-    // modify as desired
+// modify as desired
+// data not used by CDI 
   event_status_enum consumer_status[5+4*MAX_TRACKS+3]; // Array to hold the state of each event (on/off/unknown) for the 42 events defined in the configuration
   event_status_enum producer_status[2+MAX_DOORS+2]; // Array to hold the state of each event (on/off/unknown) for the events defined in the configuration
   TrackAddress Tracks[MAX_TRACKS];
@@ -92,7 +93,6 @@ typedef struct{
   LightAddress Lights[NumOfLights];
   uint8_t CurrentTrack; // current track location
   uint8_t BridgeOrientation; // current bridge orientation
-// data not used by CDI 
   uint8_t MemVersion;
   // uint8_t curpos[NUM_SERVOS];
 } config_mem_t;
@@ -129,6 +129,8 @@ extern uint16_t ConfigMemHelper_config_mem_write(openlcb_node_t *openlcb_node, u
 extern uint16_t ConfigMemHelper_config_mem_read(openlcb_node_t *openlcb_node, uint32_t address, uint16_t count, configuration_memory_buffer_t *buffer);
 
 extern bool ConfigMemHelper_toggle_log_access(void);
+
+void Load_application_defaults(openlcb_node_t *openlcb_node);
 
 long getSteps();
 void writeSteps(long steps);

@@ -206,14 +206,14 @@ void initializeHardware() {
 
 // int Lights.pin[NumOfLights] {Light_A, Light_B};
 // int LightAddr[NumOfLights] {700, 701};
-Lights[0].pin = Light_A;
-Lights[0].address = 700;
-Lights[1].pin = Light_B;
-Lights[1].address = 701;
+ConfigMemHelper_config_data.Lights[0].pin = Light_A;
+ConfigMemHelper_config_data.Lights[0].address = 700;
+ConfigMemHelper_config_data.Lights[1].pin = Light_B;
+ConfigMemHelper_config_data.Lights[1].address = 701;
 // for (int Light=0;Light<NumOfLights;Light++){  // roundhouse lights, move to neoPixels
-//     pinMode(Lights[Light].pin, OUTPUT);
-// 	  digitalWrite(Lights[Light].pin, LOW); // turn off
-//     Lights[Light].active = false;
+//     pinMode(ConfigMemHelper_config_data.Lights[Light].pin, OUTPUT);
+// 	  digitalWrite(ConfigMemHelper_config_data.Lights[Light].pin, LOW); // turn off
+//     ConfigMemHelper_config_data.Lights[Light].active = false;
 //   }
 
 // Get the current sensor states
@@ -249,17 +249,17 @@ void LightSwitch(int Light, int dir)  // pin driven LED
 //   if (Light > (NumOfLights - 1)) return;
 //   if (dir)
 //     {
-//       digitalWrite(Lights[Light].pin, HIGH); // turn on
+//       digitalWrite(ConfigMemHelper_config_data.Lights[Light].pin, HIGH); // turn on
 //     }
 //     else
 //     {
-//       digitalWrite(Lights[Light].pin, LOW); // turn off
+//       digitalWrite(ConfigMemHelper_config_data.Lights[Light].pin, LOW); // turn off
 //     }
 // #ifdef USE_SENSORS
 //       // LN_STATUS lnStatus = LocoNet.reportSensor(LightAddr[Light], dir);
-//       // reportSensor(&LNbus, Lights[Light].address, dir);
+//       // reportSensor(&LNbus, ConfigMemHelper_config_data.Lights[Light].address, dir);
 //       Serial.print(F("Tx: Sensor: "));
-//       Serial.println(Lights[Light].address);
+//       Serial.println(ConfigMemHelper_config_data.Lights[Light].address);
 //       // Serial.print(" Status: ");
 //       // Serial.println(LocoNet.getStatusStr(lnStatus));
 // #endif
@@ -268,20 +268,20 @@ void LightSwitch(int Light, int dir)  // pin driven LED
 void ToggleLight(int Light)  // pin driven LED
 {                                               
 // if (Light > (NumOfLights - 1)) return;
-//   if (Lights[Light].active)
+//   if (ConfigMemHelper_config_data.Lights[Light].active)
 //     {
-//       digitalWrite(Lights[Light].pin, LOW); // turn off
-//       Lights[Light].active = false;
+//       digitalWrite(ConfigMemHelper_config_data.Lights[Light].pin, LOW); // turn off
+//       ConfigMemHelper_config_data.Lights[Light].active = false;
 //     }
 //     else
 //     {
-//       digitalWrite(Lights[Light].pin, HIGH); // turn on
-//       Lights[Light].active = true;
+//       digitalWrite(ConfigMemHelper_config_data.Lights[Light].pin, HIGH); // turn on
+//       ConfigMemHelper_config_data.Lights[Light].active = true;
 //     }
 // #ifdef DEBUG_PRINT
-//       // LN_STATUS lnStatus = LocoNet.reportSensor(Lights[Light].address, Lights[Light].active);
+//       // LN_STATUS lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Lights[Light].address, ConfigMemHelper_config_data.Lights[Light].active);
 //       // Serial.print(F("Tx: Sensor: "));
-//       // Serial.print(Lights[Light].address);
+//       // Serial.print(ConfigMemHelper_config_data.Lights[Light].address);
 //       // Serial.print(" Status: ");
 //       // Serial.println(LocoNet.getStatusStr(lnStatus));
 // #endif
@@ -315,9 +315,9 @@ void moveHome() {   // Function to find the home position.
         stepper.disableOutputs();
     #endif
     stepper.setCurrentPosition(0);    
-    CurrentTrack = homeTrack;
-    BridgeOrientation = 32;
-    writeTrack(CurrentTrack, BridgeOrientation);
+   ConfigMemHelper_config_data.CurrentTrack = homeTrack;
+   ConfigMemHelper_config_data.BridgeOrientation = 32;
+    writeTrack(ConfigMemHelper_config_data.CurrentTrack,ConfigMemHelper_config_data.BridgeOrientation);
     lastStep = 0;
     homed = 1;
     Serial.println(F("Turntable homed successfully"));    
@@ -325,7 +325,7 @@ void moveHome() {   // Function to find the home position.
     { 
     #ifdef USE_SENSORS
       // LN_STATUS lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Tracks[i].address,0);    
-      // reportSensor(&LNbus,Tracks[i].address,0);  
+      // reportSensor(&LNbus,ConfigMemHelper_config_data.Tracks[i].address,0);  
       Serial.print(F("Tx:  Sensor Off: "));
       Serial.println(ConfigMemHelper_config_data.Tracks[i].address, DEC);
       // Serial.print(F(" Status: "));
@@ -348,8 +348,8 @@ void moveHome() {   // Function to find the home position.
       #endif
       if ((stepper.targetPosition() > lastTarget + REHOME_THRESHOLD)||(stepper.targetPosition() < lastTarget - REHOME_THRESHOLD)) { // expand this to a range +/-
         stepper.setCurrentPosition(0);
-        CurrentTrack = homeTrack;
-        BridgeOrientation = 32;
+       ConfigMemHelper_config_data.CurrentTrack = homeTrack;
+       ConfigMemHelper_config_data.BridgeOrientation = 32;
         lastStep = 0;
         homed = 2;
         Serial.println(F("ERROR: Turntable failed to home, setting random home position"));
@@ -424,25 +424,25 @@ void moveToPosition(long steps, uint8_t phaseSwitch) {
 void MoveToTrack(int i,uint8_t Direction){ 
     if (i > MAX_TRACKS) return;
 #ifdef USE_SENSORS      
-      // LN_STATUS lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Tracks[CurrentTrack].address,0);     
-      // reportSensor(&LNbus,Tracks[CurrentTrack].address,0);       
+      // LN_STATUS lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Tracks[ConfigMemHelper_config_data.CurrentTrack].address,0);     
+      // reportSensor(&LNbus,ConfigMemHelper_config_data.Tracks[ConfigMemHelper_config_data.CurrentTrack].address,0);       
       Serial.print(F("Tx:  Sensor Off: "));
-      Serial.println(CurrentTrack, DEC);
-      // Serial.println(ConfigMemHelper_config_data.Tracks[CurrentTrack].address, DEC);
+      Serial.println(ConfigMemHelper_config_data.CurrentTrack, DEC);
+      // Serial.println(ConfigMemHelper_config_data.Tracks[ConfigMemHelper_config_data.CurrentTrack].address, DEC);
       // Serial.print(F(" Status: "));
       // Serial.println(LocoNet.getStatusStr(lnStatus));
 #endif      
       lastAddr = ConfigMemHelper_config_data.Tracks[i].address;
       lastDirection = Direction;
-      LastTrack = CurrentTrack;
-      CurrentTrack = i;
-      BridgeOrientation = Direction;
-      writeTrack(CurrentTrack, BridgeOrientation);  // write track number in EEPROM
+      LastTrack =ConfigMemHelper_config_data.CurrentTrack;
+     ConfigMemHelper_config_data.CurrentTrack = i;
+     ConfigMemHelper_config_data.BridgeOrientation = Direction;
+      writeTrack(ConfigMemHelper_config_data.CurrentTrack,ConfigMemHelper_config_data.BridgeOrientation);  // write track number in EEPROM
       Serial.print(F("Moving to Track : "));
       Serial.println(i, DEC);
 #ifdef USE_SENSORS
       // lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Tracks[i].address,1);    
-      // reportSensor(&LNbus,Tracks[i].address,1);    
+      // reportSensor(&LNbus,ConfigMemHelper_config_data.Tracks[i].address,1);    
       Serial.print(F("Tx:  Sensor On: "));
       // Serial.println(ConfigMemHelper_config_data.Tracks[i].address, DEC);
       // Serial.print(F(" Status: "));
@@ -536,7 +536,7 @@ void calibration() {
       Serial.println(F("CALIBRATION: Phase 1, found home."));
       stepper.stop();
       stepper.setCurrentPosition(0);
-      CurrentTrack = homeTrack;
+     ConfigMemHelper_config_data.CurrentTrack = homeTrack;
       homed = 1;
       lastTarget = 0;
     }
@@ -563,7 +563,7 @@ void calibration() {
       Serial.print(F("Step count completed: "));
       Serial.println(fullTurnSteps);
       stepper.setCurrentPosition(0);  // since we have come back home
-      CurrentTrack = homeTrack;
+     ConfigMemHelper_config_data.CurrentTrack = homeTrack;
       lastStep = stepper.currentPosition();
     }
     else  // error
@@ -577,17 +577,17 @@ void calibration() {
     //  reference detected
       if (!stepper.isRunning() ) {   
         Serial.print(F("Calibration: Phase 3 completed, reference count: "));
-        Serial.println(refCount);
+        Serial.println(ConfigMemHelper_config_data.attributes.ReferenceCount);
         lastStep = stepper.currentPosition();
         calibrationPhase = 4;
-        refCountDec = refCount;
+        refCountDec = ConfigMemHelper_config_data.attributes.ReferenceCount;
         stepper.enableOutputs();
         stepper.moveTo(0);
         lastTarget = 0;
       } else { // reference point found, log it
         lastStep = stepper.currentPosition();
-        setReferences(refCount, lastStep, false);
-        refCount++; // count tracks
+        setReferences(ConfigMemHelper_config_data.attributes.ReferenceCount, lastStep, false);
+        ConfigMemHelper_config_data.attributes.ReferenceCount++; // count tracks
       }
     }
     break;
@@ -597,7 +597,7 @@ void calibration() {
       // reference detected
       if (!stepper.isRunning() ) {   
         Serial.print(F("Calibration: Phase 4 completed, reference count: "));
-        Serial.println(refCount);
+        Serial.println(ConfigMemHelper_config_data.attributes.ReferenceCount);
         calibrationPhase = 0;
         calibrating = false;
         if (activeScreen == 1) {
@@ -615,9 +615,9 @@ void calibration() {
         Serial.print(F("References count: "));
               Serial.print(refCountDec);
         Serial.print(F(" at position: "));
-              Serial.print(References[refCountDec].stepsForward);
+              Serial.print(ConfigMemHelper_config_data.References[refCountDec].stepsForward);
         Serial.print(F(" and: "));
-              Serial.println(References[refCountDec].stepsReverse);
+              Serial.println(ConfigMemHelper_config_data.References[refCountDec].stepsReverse);
         #endif
       }
     }
@@ -664,21 +664,21 @@ void positionCheck()
         Serial.println(F(" ** Reset home "));
         #endif
     stepper.setCurrentPosition(0); 
-    // CurrentTrack = homeTrack;
+    //ConfigMemHelper_config_data.CurrentTrack = homeTrack;
     lastStep = (currentStep);  
     lastTarget = (lastTarget);
-    moveToPosition(targetSave, BridgeOrientation);
+    moveToPosition(targetSave,ConfigMemHelper_config_data.BridgeOrientation);
     stepper.run(); 
     rehome = false;
   }
 
 // find if you are at a reference point
   if ((getBridgeState() == BRIDGE_SENSOR_ACTIVE_STATE) && (stepper.isRunning()) && (!calibrating) && (homed == 1)) { 
-    for (int i = 1; i <= (refCount); i++)   // find the closest reference to position
+    for (int i = 1; i <= (ConfigMemHelper_config_data.attributes.ReferenceCount); i++)   // find the closest reference to position
     { 
-        // if ((i != LastTrack) && (i != CurrentTrack) && (abs(currentStep - References[i].stepsReverse) < BRIDGE_PRECISION)) { // within range of this track
-        if (abs(currentStep - References[i-1].stepsReverse) < BRIDGE_PRECISION) { // within range of this reference
-          variance =  References[i-1].stepsReverse - currentStep;
+        // if ((i != LastTrack) && (i !=ConfigMemHelper_config_data.CurrentTrack) && (abs(currentStep - ConfigMemHelper_config_data.References[i].stepsReverse) < BRIDGE_PRECISION)) { // within range of this track
+        if (abs(currentStep - ConfigMemHelper_config_data.References[i-1].stepsReverse) < BRIDGE_PRECISION) { // within range of this reference
+          variance =  ConfigMemHelper_config_data.References[i-1].stepsReverse - currentStep;
           if (variance < outside)
             { outside = variance;
               closest = i-1;
@@ -710,7 +710,7 @@ void positionCheck()
       lastTarget = (lastTarget + stepAdjustment);
       // stepper.move(-stepAdjustment);
       // stepper.runToNewPosition(targetSave-stepAdjustment);
-      moveToPosition(targetSave, BridgeOrientation);
+      moveToPosition(targetSave,ConfigMemHelper_config_data.BridgeOrientation);
       stepper.run(); 
       startChecking();
       rehome = true;
@@ -760,8 +760,8 @@ bool getBridgeState() {   // Function to debounce and get the state of the bridg
 void initiateHoming() {   // Function to reset home state, triggering homing to happen
   homed = 0;
   calibrating = false;
-  // calibrationPhase = 1;
-  // moveHome();
+  calibrationPhase = 1;
+  moveHome();
   Serial.println(F(" initiating homing..."));
   stepper.enableOutputs();
   stepper.moveTo(sanitySteps);
@@ -780,7 +780,7 @@ void initiateStepCount() {    // Function to trigger calibration to begin
 
 void initiateReferences() {    // Function to trigger calibration to begin
   calibrating = true;
-  refCount = 0;
+  ConfigMemHelper_config_data.attributes.ReferenceCount = 0;
   stepper.enableOutputs();
   stepper.moveTo(fullTurnSteps);
   lastTarget = fullTurnSteps;
@@ -802,26 +802,26 @@ void IncrementTrack(){
               // Go to higher position
     Serial.println(F("Increment Track"));
     getTrack();
-    if(CurrentTrack >= trackCount)
+    if(ConfigMemHelper_config_data.CurrentTrack >= ConfigMemHelper_config_data.attributes.TrackCount)
       {
-        MoveToTrack(1,BridgeOrientation);
+        MoveToTrack(1,ConfigMemHelper_config_data.BridgeOrientation);
       }
     else
       {
-        MoveToTrack(CurrentTrack + 1,BridgeOrientation);
+        MoveToTrack(ConfigMemHelper_config_data.CurrentTrack + 1,ConfigMemHelper_config_data.BridgeOrientation);
       }
 }
 void DecrementTrack(){ 
               //      Go to lower position
     Serial.println(F("Decrement Track"));  
     getTrack();
-    if(CurrentTrack < 2)
+    if(ConfigMemHelper_config_data.CurrentTrack < 2)
       {
-        MoveToTrack(trackCount,BridgeOrientation);
+        MoveToTrack(ConfigMemHelper_config_data.attributes.TrackCount,ConfigMemHelper_config_data.BridgeOrientation);
       }
     else
       {
-        MoveToTrack(CurrentTrack - 1,BridgeOrientation);
+        MoveToTrack(ConfigMemHelper_config_data.CurrentTrack - 1,ConfigMemHelper_config_data.BridgeOrientation);
       }
 }
 void BumpBar(){
@@ -832,9 +832,9 @@ void BumpBar(){
       #endif
     if (abs(X_Coord - (HRES/2)) > 80) {
       if (X_Coord > (HRES/2) )
-        moveToPosition(stepper.currentPosition()+(STEPPER_GEARING_FACTOR * ((X_Coord - (HRES/2)-80)/6)), BridgeOrientation);
+        moveToPosition(stepper.currentPosition()+(STEPPER_GEARING_FACTOR * ((X_Coord - (HRES/2)-80)/6)),ConfigMemHelper_config_data.BridgeOrientation);
       else
-        moveToPosition(stepper.currentPosition()+(STEPPER_GEARING_FACTOR * ((X_Coord - (HRES/2)+80)/6)), BridgeOrientation);
+        moveToPosition(stepper.currentPosition()+(STEPPER_GEARING_FACTOR * ((X_Coord - (HRES/2)+80)/6)),ConfigMemHelper_config_data.BridgeOrientation);
     }
 }
 void BumpForeward(int x){
@@ -844,7 +844,7 @@ void BumpForeward(int x){
             stepper.enableOutputs();
       #endif
     // stepper.move(Bump * x);
-    moveToPosition(stepper.currentPosition()+(Bump * x), BridgeOrientation);
+    moveToPosition(stepper.currentPosition()+(Bump * x),ConfigMemHelper_config_data.BridgeOrientation);
 }
 void BumpBack(int x){
                 // bump counter-clockwise          
@@ -853,23 +853,23 @@ void BumpBack(int x){
             stepper.enableOutputs();
       #endif
     // stepper.move(-Bump * x);
-    moveToPosition(stepper.currentPosition()-(Bump * x), BridgeOrientation);
+    moveToPosition(stepper.currentPosition()-(Bump * x),ConfigMemHelper_config_data.BridgeOrientation);
 }
 void SetHome(){
               // set home to current position         
     Serial.println(F("Set Home Here"));    
     stepper.setCurrentPosition(0);  
-    CurrentTrack = homeTrack;               
+   ConfigMemHelper_config_data.CurrentTrack = homeTrack;               
 }
 void Turn180(){
                 //          flip 180
     Serial.println(F("Turn 180 degrees"));      
-    if (BridgeOrientation == 0) {BridgeOrientation = 32;} else {BridgeOrientation = 0;}
+    if (ConfigMemHelper_config_data.BridgeOrientation == 0) {ConfigMemHelper_config_data.BridgeOrientation = 32;} else {ConfigMemHelper_config_data.BridgeOrientation = 0;}
       #ifdef STEPPER_ENABLE_PIN
             stepper.enableOutputs();
       #endif
     // stepper.move(halfTurnSteps);    
-    moveToPosition(absPosition(stepper.currentPosition()+halfTurnSteps), BridgeOrientation);                  
+    moveToPosition(absPosition(stepper.currentPosition()+halfTurnSteps),ConfigMemHelper_config_data.BridgeOrientation);                  
 }
 void Case8(){
               //          change direction
@@ -954,7 +954,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       break;      
     case 10:      // open all doors 
       // produceOpenAll();    
-      // for (int i = 0; i <= trackCount; i++) {
+      // for (int i = 0; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
       // if (ConfigMemHelper_config_data.Tracks[i].doorPresent) 
       // {
       //   // MoveServo(ConfigMemHelper_config_data.Tracks[i].servoNumber, 32);            
@@ -964,7 +964,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       break;
     case 11:      // close all doors 
       // produceCloseAll();
-      // for (int i = 0; i <= trackCount; i++) {
+      // for (int i = 0; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
       // if (ConfigMemHelper_config_data.Tracks[i].doorPresent) 
       // {
       //   // MoveServo(ConfigMemHelper_config_data.Tracks[i].servoNumber, 0);            
@@ -1004,6 +1004,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       drawDiagnosticPage();
       break;    
     case 18: // settings page
+      drawButtonPage();
       // drawConfigPage();
       break;    
     case 19:
@@ -1090,25 +1091,25 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       switch (action){
       case 0:
         // decrement track count
-        if (trackCount > 0){
-           --trackCount;
+        if (ConfigMemHelper_config_data.attributes.TrackCount > 0){
+           --ConfigMemHelper_config_data.attributes.TrackCount;
            writeCount();
         }
         break;
       case 1:
         // increment track count
-        if (trackCount < NUM_TRACKS) {
-           ++trackCount;
+        if (ConfigMemHelper_config_data.attributes.TrackCount < NUM_TRACKS) {
+           ++ConfigMemHelper_config_data.attributes.TrackCount;
            writeCount();
         }
         break;
       case 2:
         // decrement track edit selection
-        if (refCount > 0) --refCount;
+        if (ConfigMemHelper_config_data.attributes.ReferenceCount > 0) --ConfigMemHelper_config_data.attributes.ReferenceCount;
         break;
       case 3:
         // increment track edit selection
-        if (refCount < NumberOfReferences) ++refCount;
+        if (ConfigMemHelper_config_data.attributes.ReferenceCount < NumberOfReferences) ++ConfigMemHelper_config_data.attributes.ReferenceCount;
         break;
       case 4:
         // decrement track edit selection
@@ -1116,7 +1117,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
         break;
       case 5:
         // increment track edit selection
-        if (editTrack < trackCount) ++editTrack;
+        if (editTrack < ConfigMemHelper_config_data.attributes.TrackCount) ++editTrack;
         break;
       default:
         // statements
@@ -1135,7 +1136,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
           break;
         case 1:
           // increment address
-          // if (ConfigMemHelper_config_data.Tracks[editTrack].address < MaxDCCaddress) ++Tracks[editTrack].address;
+          // if (ConfigMemHelper_config_data.Tracks[editTrack].address < MaxDCCaddress) ++ConfigMemHelper_config_data.Tracks[editTrack].address;
           break;
         case 2:
           // decrement step position
@@ -1164,7 +1165,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
           break;
         case 6:
           // increment servo number
-          // if (ConfigMemHelper_config_data.Tracks[editTrack].servoNumber < i_max_servo) ++Tracks[editTrack].servoNumber;
+          // if (ConfigMemHelper_config_data.Tracks[editTrack].servoNumber < i_max_servo) ++ConfigMemHelper_config_data.Tracks[editTrack].servoNumber;
           break;
         default:
           // statements
@@ -1244,7 +1245,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
               if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
               {
                 // produceDoor(ConfigMemHelper_config_data.Tracks[track].servoNumber);
-                // if (Servos[Tracks[track].servoNumber].Status)
+                // if (Servos[ConfigMemHelper_config_data.Tracks[track].servoNumber].Status)
                 // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            }
                 // else
                 // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            }
@@ -1294,8 +1295,8 @@ void setTrack(int track, long position, bool reverse)
 void setReferences(int spot, long position, bool reverse)
 { if ((spot >= 0) && (spot < NumberOfReferences)) {
     position = absPosition(position);
-    if (reverse) References[spot].stepsReverse = position;
-    else References[spot].stepsForward = position;
+    if (reverse) ConfigMemHelper_config_data.References[spot].stepsReverse = position;
+    else ConfigMemHelper_config_data.References[spot].stepsForward = position;
   }  
 }
 void setTrackDefaults()
@@ -1311,7 +1312,7 @@ void setTrackDefaults()
       ConfigMemHelper_config_data.Tracks[i].doorPresent = true;
       // ConfigMemHelper_config_data.Tracks[i].servoNumber = (i-4) % i_max_servo;
     }
-  trackCount = NUM_TRACKS;
+  ConfigMemHelper_config_data.attributes.TrackCount = NUM_TRACKS;
   
   homeTrack = 3;
 	// track zero is the position of the homing sensor

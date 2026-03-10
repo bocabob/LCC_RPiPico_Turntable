@@ -39,7 +39,7 @@
 
 #include "../../BoardSettings.h"
 
-//#define PRINT_DEBUG_RPI_PICO_DRIVERS
+#define PRINT_DEBUG_RPI_PICO_DRIVERS
 
 #ifdef ARDUINO_COMPATIBLE
 // TODO:  include any header files the Raspberry Pi Pico need to compile under Arduino/PlatformIO
@@ -250,7 +250,7 @@ uint16_t RPiPicoDrivers_config_mem_read(openlcb_node_t *openlcb_node, uint32_t a
 uint16_t RPiPicoDrivers_config_mem_write(openlcb_node_t *openlcb_node, uint32_t address, uint16_t count, configuration_memory_buffer_t *buffer) {
 
 #ifdef PRINT_DEBUG_RPI_PICO_DRIVERS
-  Serial.print("RPiPicoDrivers_config_mem_read - Writing Address: 0x");
+  Serial.print("RPiPicoDrivers_config_mem_write - Writing Address: 0x");
   Serial.print(address, HEX);
   Serial.print(", Count: 0x");
   Serial.println(count, HEX);
@@ -318,8 +318,9 @@ uint16_t RPiPicoDrivers_config_mem_write(openlcb_node_t *openlcb_node, uint32_t 
 
   #if defined(USE_TILLAART) && defined(EXTERNAL_EEPROM)
   if (bytes_written != 0) {   // S_OK
-    Serial.println("ConfigMemory Write Failed.  Did you define the correct CONFIG_MEM_SIZE in rpi_pico_drivers.h, or correct I2C pins"); 
-    return 0;     
+    Serial.print(bytes_written, HEX);
+    Serial.println("  ConfigMemory Write Failed.  Did you define the correct CONFIG_MEM_SIZE in rpi_pico_drivers.h, or correct I2C pins"); 
+    return bytes_written;     
     }
   #else
    if (!bytes_written) {   // FALSE
