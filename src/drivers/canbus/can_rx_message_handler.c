@@ -370,14 +370,15 @@ void CanRxMessageHandler_stream_frame(can_msg_t* can_msg, uint8_t offset, payloa
 }
 
     /**
-     * @brief Handles CID frames per CanFrameTransferS Section 3.5.3.
+     * @brief Handles CID frames per CanFrameTransferS §6.2.5.
      *
-     * @details Per the standard: "Nodes that receive a CID frame that contains
-     * the alias they are using or have reserved shall respond with an RID frame."
-     * CID is a probe during alias reservation — the correct defence is always
-     * RID, regardless of whether the node is permitted or still claiming.
-     * This differs from RID/AMD/AMR receipt which indicates an active alias
-     * collision and is handled by the internal `_check_for_duplicate_alias()` helper.
+     * @details Per the standard (§6.2.5 Node ID Alias Collision Handling):
+     * "If the frame is a Check ID (CID) frame, send a Reserve ID (RID) frame
+     * in response."  The correct defence is always RID, regardless of whether
+     * the node is Permitted or still Inhibited.
+     * This differs from non-CID frames (RID/AMD/AMR) which indicate an active
+     * alias collision and are handled by the internal `_check_for_duplicate_alias()`
+     * helper.
      *
      * @verbatim
      * @param can_msg  Received CID frame.
@@ -568,6 +569,13 @@ void CanRxMessageHandler_ame_frame(can_msg_t* can_msg) {
         }
 
         return;
+
+    }
+
+    // Global AME: discard cached listener aliases per CanFrameTransferS §6.2.3
+    if (_interface->listener_flush_aliases) {
+
+        _interface->listener_flush_aliases();
 
     }
 

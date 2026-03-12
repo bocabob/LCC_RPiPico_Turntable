@@ -18,5 +18,6 @@
     "[cpp]": {
         "editor.defaultFormatter": "ms-vscode.cpptools"
     },
-    "C_Cpp.formatting": "Disabled"
+    "C_Cpp.formatting": "Disabled",
+    "C_Cpp.default.compilerPath": "C:/Users/Attic/AppData/Local/Arduino15/packages/rp2040/tools/pqt-gcc/4.1.0-1aec55e/bin/arm-none-eabi-gcc.exe"
 }

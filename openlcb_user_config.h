@@ -66,12 +66,12 @@
 // configuration memory space the user-editable name and description strings
 // begin.  The standard layout puts the user name at address 0 and the user
 // description immediately after at byte 62:
-//   62 = LEN_SNIP_USER_NAME_BUFFER (63) - 1
+//   63 = LEN_SNIP_USER_NAME_BUFFER (63)
 
 #define USER_DEFINED_CDI_LENGTH                      20000
 #define USER_DEFINED_FDI_LENGTH                      1000
 #define USER_DEFINED_CONFIG_MEM_USER_NAME_ADDRESS    0x00000000
-#define USER_DEFINED_CONFIG_MEM_USER_DESCRIPTION_ADDRESS  62   /* LEN_SNIP_USER_NAME_BUFFER(63) - 1 */
+#define USER_DEFINED_CONFIG_MEM_USER_DESCRIPTION_ADDRESS  62   /* LEN_SNIP_USER_NAME_BUFFER(63) */
 
 // =============================================================================
 // Train Protocol (requires OPENLCB_COMPILE_TRAIN)
@@ -84,6 +84,20 @@
 #define USER_DEFINED_TRAIN_NODE_COUNT                4
 #define USER_DEFINED_MAX_LISTENERS_PER_TRAIN         6
 #define USER_DEFINED_MAX_TRAIN_FUNCTIONS             29
+
+// =============================================================================
+// Listener Alias Verification (requires OPENLCB_COMPILE_TRAIN)
+// =============================================================================
+// LISTENER_PROBE_TICK_INTERVAL  -- how many 100ms ticks between prober calls
+//                                  (1 = every 100ms, 2 = every 200ms, etc.)
+// LISTENER_PROBE_INTERVAL_TICKS -- 100ms ticks between probes of the SAME entry
+//                                  (250 = 25 seconds)
+// LISTENER_VERIFY_TIMEOUT_TICKS -- 100ms ticks to wait for AMD reply before
+//                                  declaring stale (30 = 3 seconds)
+
+#define USER_DEFINED_LISTENER_PROBE_TICK_INTERVAL    1
+#define USER_DEFINED_LISTENER_PROBE_INTERVAL_TICKS   250
+#define USER_DEFINED_LISTENER_VERIFY_TIMEOUT_TICKS   30
 
 // =============================================================================
 // Application-defined node pointer (forward-declared to avoid circular include)

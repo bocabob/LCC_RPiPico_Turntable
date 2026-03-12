@@ -942,35 +942,61 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       BumpBar();
       break;      
     case 7:      // toggle RH interior lights
-      // produceLightIn();
+      produceLightIn();
       // ToggleLight(0);
       break;
     case 8:      // toggle RH exterior lights
-      // produceLightEx();
+      produceLightEx();
       // ToggleLight(1);
       break;    
     case 9:      // button 5
       IncrementTrack();
       break;      
     case 10:      // open all doors 
-      // produceOpenAll();    
-      // for (int i = 0; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
-      // if (ConfigMemHelper_config_data.Tracks[i].doorPresent) 
-      // {
-      //   // MoveServo(ConfigMemHelper_config_data.Tracks[i].servoNumber, 32);            
-      //   drawTrack(i,((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
-      // }
-      // }
+      produceOpenAll();    
+      for (int track = 0; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
+      if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
+      {
+        // MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            
+        // drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        switch (activeScreen)
+        {
+        case  1:
+          /* code */
+          drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+          break;
+        case 2:
+          /* code */
+          drawDoorButton(track);
+          break;
+        default:
+          break;
+        }
+      }
+      }
       break;
     case 11:      // close all doors 
-      // produceCloseAll();
-      // for (int i = 0; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
-      // if (ConfigMemHelper_config_data.Tracks[i].doorPresent) 
-      // {
-      //   // MoveServo(ConfigMemHelper_config_data.Tracks[i].servoNumber, 0);            
-      //   drawTrack(i,((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
-      // }
-      // }
+      produceCloseAll();
+      for (int track = 0; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
+      if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
+      {
+        // MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            
+        // drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        switch (activeScreen)
+        {
+        case  1:
+          /* code */
+          drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+          break;
+        case 2:
+          /* code */
+          drawDoorButton(track);
+          break;
+        default:
+          break;
+        }
+      }
+      }
       break;    
     case 12:      // settings page
       // drawSettingsPage();
@@ -1242,14 +1268,30 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
               break;
             case 2:
               // toggle door to track w/redraw
+              // Serial.print(F("Door: "));
+              // Serial.print(track);
               if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
               {
-                // produceDoor(ConfigMemHelper_config_data.Tracks[track].servoNumber);
+                produceDoor(ConfigMemHelper_config_data.Tracks[track].servoNumber);
+              // Serial.print(F("  Servo: "));
+              // Serial.println(ConfigMemHelper_config_data.Tracks[track].servoNumber);
                 // if (Servos[ConfigMemHelper_config_data.Tracks[track].servoNumber].Status)
                 // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            }
                 // else
                 // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            }
-                drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+                switch (activeScreen)
+                {
+                case  1:
+                  /* code */
+                  drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+                  break;
+                case 2:
+                  /* code */
+                  drawDoorButton(track);
+                  break;
+                default:
+                  break;
+                }
               }
               break;
             default:

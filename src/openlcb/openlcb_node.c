@@ -295,7 +295,7 @@ static void _generate_event_ids(openlcb_node_t *openlcb_node) {
 
     }
 
-    indexer = 0;
+    // indexer = 0;
     openlcb_node->producers.count = 0;
     for (int j = 0; j < openlcb_node->parameters->producer_count_autocreate; j++) {
 

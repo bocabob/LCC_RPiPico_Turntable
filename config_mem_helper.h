@@ -131,6 +131,7 @@ extern uint16_t ConfigMemHelper_config_mem_read(openlcb_node_t *openlcb_node, ui
 extern bool ConfigMemHelper_toggle_log_access(void);
 
 void Load_application_defaults(openlcb_node_t *openlcb_node);
+void Set_Application_Values_From_Config(openlcb_node_t *openlcb_node, config_mem_t *config);
 
 long getSteps();
 void writeSteps(long steps);

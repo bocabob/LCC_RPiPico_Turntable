@@ -96,11 +96,9 @@ static void _load_defaults_attributes(openlcb_node_t *openlcb_node, config_mem_t
   const char *door_tag = "D";
   for (int d = 0; d < MAX_DOORS; d++) {
     strncpy(config->attributes.doors[d].doorName, door_name, sizeof(config->attributes.doors[d].doorName));
-    // config->attributes.doors[d].doorName = "Door";
-    // config->attributes.doors[d].doorShort[0] = "D";
     strncpy(config->attributes.doors[d].doorShort, door_tag, sizeof(config->attributes.doors[d].doorShort));
     config->attributes.doors[d].eidToggle = swap_endian64((openlcb_node->id << 16) + *producer_index); (*producer_index)++; // EventID for toggle door
-    config->attributes.doors[d].TrackLocation = 5 + d; // Default track location for each door
+    config->attributes.doors[d].TrackLocation = 4 + d; // Default track location for each door
   }
   config->attributes.eidBridge = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for toggle bridge lights
   config->attributes.eidInterior = swap_endian64((openlcb_node->id << 16) + *producer_index); (*producer_index)++; // EventID for toggle interior lights
@@ -145,29 +143,29 @@ static void _load_defaults_application(openlcb_node_t *openlcb_node, config_mem_
 */
     // setTrackDefaults();
     
-  for (int i = 0; i < (sizeof(ConfigMemHelper_config_data.Tracks) / sizeof(TrackAddress)); i++) {
-      ConfigMemHelper_config_data.Tracks[i].address = 500 + i;
-      ConfigMemHelper_config_data.Tracks[i].trackFront = 0;
-      ConfigMemHelper_config_data.Tracks[i].trackBack = (FULL_TURN_STEPS / 2);
-      ConfigMemHelper_config_data.Tracks[i].doorPresent = false;
-      ConfigMemHelper_config_data.Tracks[i].servoNumber = 0;
+  for (int i = 0; i < (sizeof(config->Tracks) / sizeof(TrackAddress)); i++) {
+      config->Tracks[i].address = 500 + i;
+      config->Tracks[i].trackFront = 0;
+      config->Tracks[i].trackBack = (FULL_TURN_STEPS / 2);
+      config->Tracks[i].doorPresent = false;
+      config->Tracks[i].servoNumber = 0;
     }
-  for (int i = 0; i < config->attributes.TrackCount; i++) {
-    config->Tracks[i].address = 500+i; // Default address
-    config->Tracks[i].trackFront = swap_endian32(config->attributes.tracks[i].steps); // Default address
-    config->Tracks[i].trackBack = config->Tracks[i].trackFront + (swap_endian32(config->attributes.FullTurnSteps) / 2); // Default address
-    config->Tracks[i].doorPresent = false; // Default address
-    config->Tracks[i].servoNumber = i; // Default address
-  }
+  // for (int i = 0; i < config->attributes.TrackCount; i++) {
+  //   config->Tracks[i].address = 500+i; // Default address
+    // config->Tracks[i].trackFront = swap_endian32(config->attributes.tracks[i].steps); // Default address
+    // config->Tracks[i].trackBack = config->Tracks[i].trackFront + (swap_endian32(config->attributes.FullTurnSteps) / 2); // Default address
+    // config->Tracks[i].doorPresent = false; // Default address
+    // config->Tracks[i].servoNumber = i; // Default address
+  // }
 
-  for (int i = 4; i < (sizeof(ConfigMemHelper_config_data.Tracks) / sizeof(TrackAddress)-1); i++) {
-      ConfigMemHelper_config_data.Tracks[i].doorPresent = true;
-      ConfigMemHelper_config_data.Tracks[i].servoNumber = (i-4) % MAX_DOORS;
-    }
-  ConfigMemHelper_config_data.attributes.TrackCount = NUM_TRACKS;
+  // for (int i = 4; i < (sizeof(config->Tracks) / sizeof(TrackAddress)-1); i++) {
+  //     config->Tracks[i].doorPresent = true;
+  //     config->Tracks[i].servoNumber = (i-4) % MAX_DOORS;
+  //   }
+  // config->attributes.TrackCount = NUM_TRACKS;
   
-  homeTrack = 3;
-
+  // homeTrack = 3;
+  Set_Application_Values_From_Config(openlcb_node, config);
 return;
 
 	// track zero is the position of the homing sensor
@@ -229,17 +227,52 @@ return;
 
 }
 
+void Set_Application_Values_From_Config(openlcb_node_t *openlcb_node, config_mem_t *config) {
+/*
+  TrackAddress Tracks[MAX_TRACKS];
+  ReferenceStep References[NumberOfReferences];
+  LightAddress Lights[NumOfLights];
+  uint8_t CurrentTrack; // current track location
+  uint8_t BridgeOrientation; // current bridge orientation
+  uint8_t MemVersion;
+
+  
+	int address;
+	long trackFront;
+	long trackBack;
+  bool doorPresent;
+  int servoNumber;
+*/
+    // setTrackDefaults();
+    
+  for (int i = 0; i <= config->attributes.TrackCount; i++) {
+    config->Tracks[i].trackFront = swap_endian32(config->attributes.tracks[i].steps); // Default address
+    config->Tracks[i].trackBack = config->Tracks[i].trackFront + (swap_endian32(config->attributes.FullTurnSteps) / 2); // Default address
+    config->Tracks[i].doorPresent = false; // Default address
+    config->Tracks[i].servoNumber = 0; // Default address
+  }
+
+  for (int d = 0; d <= config->attributes.DoorCount; d++) { 
+    if (config->attributes.doors[d].TrackLocation > 0) {
+      config->Tracks[config->attributes.doors[d].TrackLocation].doorPresent = true;
+      config->Tracks[config->attributes.doors[d].TrackLocation].servoNumber = d;
+    }
+  }
+  homeTrack = config->attributes.HomeTrack;
+}
 uint16_t ConfigMemHelper_config_mem_write(openlcb_node_t *openlcb_node, uint32_t address, uint16_t count, configuration_memory_buffer_t *buffer) {
 
   // Hook into the Configuration Memory Write to update the data structures in parallel
-
+  uint16_t bytes_written = 0;
   // Are we in the internal process of syncing the NMV with the struct?  If so just write to the NVM as we are syncing them.
   if (_direct_access) {  
 
     delay(10);
-
-    return RPiPicoDrivers_config_mem_write(openlcb_node, address, count, buffer);
-
+    bytes_written = RPiPicoDrivers_config_mem_write(openlcb_node, address, count, buffer);
+    // RPiPicoDrivers_config_mem_read(openlcb_node, address, count, buffer);
+    delay(10);
+    Set_Application_Values_From_Config(openlcb_node, &ConfigMemHelper_config_data);
+    return bytes_written;
   }
 
   // This is a call from a Configuration Memory Protocol message from an external node or configuration tool so keep the NVM and data structure in sync
@@ -306,7 +339,7 @@ void Load_application_defaults(openlcb_node_t *openlcb_node){
 bool ConfigMemHelper_reset_and_write_default(openlcb_node_t *openlcb_node) {
 
   uint16_t consumer_index = 0;
-  uint16_t producer_index = 0;
+  uint16_t producer_index = 128; // Start producer index at 128 to leave room for the 128 consumer events defined in the attributes for auto assignment of EventIDs to producers after the consumer EventIDs in the nodeid space
 
   // Just write this to the NVM don't try to keep the RAM buffer in sync, it is as we want it and just want that image in NVM
   _direct_access = true;

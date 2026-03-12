@@ -167,6 +167,7 @@ void _check_for_nvm_initialization(void) {
 void _register_producers(void) {
 
   OpenLcbApplication_clear_producer_eventids(OpenLcbUserConfig_node_id);
+
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.OpenAll), ConfigMemHelper_config_data.producer_status[0]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.CloseAll), ConfigMemHelper_config_data.producer_status[1]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
   for (int i = 0; i < MAX_DOORS; i++) {
@@ -175,30 +176,63 @@ void _register_producers(void) {
   
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidInterior), ConfigMemHelper_config_data.producer_status[2+MAX_DOORS]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior), ConfigMemHelper_config_data.producer_status[3+MAX_DOORS]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID 
-/*
-
-void produceLightIn()
-{
-OpenLcb.produce(IndexLightIn);
 }
-void produceLightEx()
-{
-OpenLcb.produce(IndexLightEx);
-}
-void produceOpenAll()
-{
-OpenLcb.produce(IndexOpenAll);
-}
-void produceCloseAll()
-{
-OpenLcb.produce(IndexCloseAll);
-}
-void produceDoor(int servo)
-{
-OpenLcb.produce(IndexDoor1 + servo);
-}
-
+  /*
+bool OpenLcbApplication_send_event_pc_report(openlcb_node_t *openlcb_node, event_id_t event_id);
+bool OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior);
 */
+bool produceLightIn()
+{
+// Toggle interior lights
+ToggleProducerEventStatus(0);
+return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidInterior));
+}
+bool produceLightEx()
+{
+// Toggle exterior lights
+ToggleProducerEventStatus(1);
+return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior));
+}
+bool produceOpenAll()
+{
+// open all doors
+for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
+ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_CLEAR;  // clear all the individual door events in the NVM so that when the producer event ID is sent it will be correct for the new state of the doors (on)
+}
+return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.OpenAll));
+}
+bool produceCloseAll()
+{
+// close all doors
+for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
+ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_SET;  // set all the individual door events in the NVM so that when the producer event ID is sent it will be correct for the new state of the doors (on)
+}
+return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.CloseAll));
+}
+bool produceDoor(int servo)
+{
+// Toggle the state of the door event in the NVM so that when the producer event ID is sent it will be correct for the new state of the door (on/off)
+ToggleProducerEventStatus(2 + servo);
+    
+return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[servo].eidToggle));
+}
+
+void ToggleProducerEventStatus(int eventIndex)
+{
+  switch (ConfigMemHelper_config_data.producer_status[eventIndex]) {   // need to read the state from the NVM to know if it is on/off/unknown when producing the producer event ID
+
+    case EVENT_STATUS_UNKNOWN:
+      ConfigMemHelper_config_data.producer_status[eventIndex] = EVENT_STATUS_SET;  // default to setting the event when it is unknown and the button is pushed, but could be set to clear if desired
+      break;
+
+    case EVENT_STATUS_SET:
+      ConfigMemHelper_config_data.producer_status[eventIndex] = EVENT_STATUS_CLEAR;  // clear if it is currently set so that the next time the event is produced it will be clear
+      break;
+
+    case EVENT_STATUS_CLEAR:
+      ConfigMemHelper_config_data.producer_status[eventIndex] = EVENT_STATUS_SET;  // set if it is currently clear so that the next time the event is produced it will be set
+      break;
+  }
 }
 
 void _register_consumers(void) {
@@ -219,11 +253,20 @@ void _register_consumers(void) {
     OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].RailCom), ConfigMemHelper_config_data.consumer_status[7+i*4]);
   }
 
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidBridge), ConfigMemHelper_config_data.consumer_status[8+MAX_TRACKS*4]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidHighLuminosity_On), ConfigMemHelper_config_data.consumer_status[9+MAX_TRACKS*4]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidLowLuminosity_On), ConfigMemHelper_config_data.consumer_status[10+MAX_TRACKS*4]);
+  OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidBridge), ConfigMemHelper_config_data.consumer_status[8+MAX_TRACKS*4]);
+  OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidHighLuminosity_On), ConfigMemHelper_config_data.consumer_status[9+MAX_TRACKS*4]);
+  OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidLowLuminosity_On), ConfigMemHelper_config_data.consumer_status[10+MAX_TRACKS*4]);
 
   
+  // OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.OpenAll), ConfigMemHelper_config_data.producer_status[0]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
+  // OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.CloseAll), ConfigMemHelper_config_data.producer_status[1]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
+  // for (int i = 0; i < MAX_DOORS; i++) {
+  //    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidToggle), ConfigMemHelper_config_data.producer_status[2+i]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
+  // }
+  
+  // OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidInterior), ConfigMemHelper_config_data.producer_status[2+MAX_DOORS]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
+  // OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior), ConfigMemHelper_config_data.producer_status[3+MAX_DOORS]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID 
+
 }
 
 bool node_initiated = false;
@@ -342,7 +385,7 @@ void setup1() {
 // #ifndef SENSOR_TESTING  // If we're not sensor testing, start Wire()
   // setupWire();
 // #endif
-  
+  Set_Application_Values_From_Config(OpenLcbUserConfig_node_id, &ConfigMemHelper_config_data);
   displayConfig();  // Display Turntable configuration
   notice(" ");
   notice("Display configured");
@@ -372,9 +415,9 @@ void setup1() {
     homed = 0;
     initiateHoming();
     // below was commented out
-    calibrating = true;
-    calibrationPhase = 1;
-    moveHome();
+    // calibrating = true;
+    // calibrationPhase = 1;
+    // moveHome();
 
     // Serial.println(F("Setup initial homing..."));
     // stepper.enableOutputs();
@@ -439,6 +482,9 @@ void loop() {
       // break;
       case 'x':      
        Load_application_defaults(OpenLcbUserConfig_node_id);
+      break;
+      case 'z':    
+       Set_Application_Values_From_Config(OpenLcbUserConfig_node_id, &ConfigMemHelper_config_data);
       break;
     };  
   }

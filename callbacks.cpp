@@ -50,6 +50,7 @@
 #include "src/openlcb/openlcb_buffer_store.h"
 #include "src/drivers/canbus/can_buffer_store.h"
 
+extern void drawFastClock(int hour, int minute);
 extern void TurntableCallback(uint16_t callin);
 extern config_mem_t ConfigMemHelper_config_data;
 
@@ -178,6 +179,9 @@ void Callbacks_on_broadcast_time_time_changed(broadcast_clock_t *clock) {
     printf("Current time: %02d:%02d ", clock->state.time.hour, clock->state.time.minute);
     Serial.print(", Rate: ");
     Serial.println(clock->state.rate.rate);
+    if (clock->state.time.valid) {
+        drawFastClock(clock->state.time.hour, clock->state.time.minute);
+    }
 
     /* ConfigMemHelper_config_data;
       struct {

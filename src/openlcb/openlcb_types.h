@@ -35,7 +35,7 @@
  * time — there is no dynamic allocation at runtime.
  *
  * @author Jim Kueneman
- * @date 28 Feb 2026
+ * @date 8 Mar 2026
  */
 
 // This is a guard condition so that contents of this file are not included
@@ -430,7 +430,13 @@
         bool is_consumer : 1;
         bool is_producer : 1;
         bool is_allocated : 1;
+        bool query_reply_pending : 1;   /**< @brief Query reply state machine active. */
+        bool sync_pending : 1;          /**< @brief Delayed sync waiting to fire after Set commands. */
         uint8_t send_query_reply_state; /**< @brief Per-clock state for query reply sequence (0-5). */
+        uint8_t sync_delay_ticks;       /**< @brief Countdown for Set command coalescing (30 = 3s at 100ms). */
+        uint16_t report_cooldown_ticks; /**< @brief Cooldown between periodic Report Time events (600 = 60s). */
+        uint8_t previous_run_state;     /**< @brief Last-seen producer node run_state for startup sync detection. */
+        void *producer_node; /**< @brief Node pointer for sending (set in setup_producer). */
 
     } broadcast_clock_t;
 
@@ -440,6 +446,7 @@
         bool allocated : 1;     /**< Buffer is in use */
         bool inprocess : 1;     /**< Multi-frame message being assembled */
         bool invalid : 1;       /**< Message invalidated (e.g. AMR) — shall be discarded */
+        bool loopback : 1;      /**< Sibling dispatch copy — skip source node, no re-loopback */
 
     } openlcb_msg_state_t;
 
@@ -650,7 +657,9 @@
         bool global_estop_active;         /**< Global Emergency Stop active */
         bool global_eoff_active;          /**< Global Emergency Off active */
         node_id_t controller_node_id;     /**< Active controller (0 if none) */
+        uint16_t controller_alias;        /**< CAN alias of active controller (0 if none) */
         uint8_t reserved_node_count;      /**< Reservation count */
+        node_id_t reserved_by_node_id;    /**< Node ID that holds the reservation (0 if none) */
         uint32_t heartbeat_timeout_s;     /**< Heartbeat deadline in seconds (0 = disabled) */
         uint32_t heartbeat_counter_100ms; /**< Heartbeat countdown in 100ms ticks */
 

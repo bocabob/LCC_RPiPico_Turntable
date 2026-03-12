@@ -303,6 +303,41 @@ tft.drawString(string, x+(length/2), y+4, 2);
 tft.setTextPadding(0); // set to zero
 }
 
+void drawFastClock(int hour, int minute)
+{
+  // tft.setTextDatum(TC_DATUM);  // Set text plotting reference datum to Top Centre (TC)
+  // tft.setTextPadding(100); // get the width of the text in pixels
+  // tft.drawString("Clock", HRES/2, VRES/2, 4);
+  // tft.setTextPadding(0); // set to zero
+  
+      //   broadcast_clock_state_t* clock = OpenLcbApplicationBroadcastTime_get_clock(BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
+      //   // clock->is_running = true;
+      //   printf("Current time: %02d:%02d\n", clock->time.hour, clock->time.minute);  
+  switch (activeScreen)
+  {
+  case  1:
+    tft.setCursor(HRES/8, (VRES/2)-30);
+    tft.print(hour);
+    tft.print(":");
+    if (minute < 10) {
+      tft.print("0"); // Add leading zero for minutes less than 10
+    }
+    tft.print(minute);
+    break;
+  case 2:
+    tft.setCursor(HRES/2, (VRES-30));
+    tft.print(hour);
+    tft.print(":");
+    if (minute < 10) {
+      tft.print("0"); // Add leading zero for minutes less than 10
+    }
+    tft.print(minute);
+    break;
+  default:
+    break;
+  }
+}
+
 void drawHomePage()
 {
   activeScreen = 1;
@@ -325,7 +360,7 @@ void drawHomePage()
   drawButton(18,butLen,Lcol,row,TFT_GREEN,"Button Page"); // go to button page
   // drawButton(18,butLen,Lcol,row,TFT_GREEN,"Configuration"); // go to config page
   row = row + vSpace;
-  drawButton(3,90,Lcol,row,TFT_GREEN,"Configure");  // run configuration routine
+  // drawButton(3,90,Lcol,row,TFT_GREEN,"Configure");  // run configuration routine
   row = row + vSpace;
   drawButton(4,butLen,Lcol,row,TFT_GREEN,"Re-Home");  // run find home routine
   row = row + vSpace*5;
@@ -376,7 +411,9 @@ void drawButtonPage()
   row = VRES - (vSpace * 2);
   col = 5;
   drawButton(13,butLen,col,row,TFT_GREEN,"Diagnostics"); // go to diagnostics page
-  col = col + 3*hSpace;  
+  col = col + hSpace;    
+  // drawButton(3,90,col,row,TFT_GREEN,"Configure");  // run configuration routine
+  col = col + 2*hSpace;  
   drawButton(5,butLen,col,row,TFT_GREEN,"Decrement");  // move one track back
   col = col + hSpace;  
   drawButton(11,butLen,col,row,TFT_GREEN,"Close All"); // close all doors
@@ -399,9 +436,9 @@ void drawButtonPage()
   // tft.setTextColor(TFT_WHITE);
   for (int track = 1; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
     box = (TrackBox +(track*3));
-    row = 1 + ((track-1) % 9) * vSpace;
+    row = 1 + ((track-1) % 9) * 40;
     col = 5 + (HRES / 2) * (int)((track-1) / 9);
-    tft.drawString(TrackName[track], col+60, row+6, 2);  // draw the name of the track
+    tft.drawString(ConfigMemHelper_config_data.attributes.tracks[track].trackName, col+60, row+6, 2);  // draw the name of the track
     // tft.drawString(TrackTag[track], col+15, row, 2);  // draw the tag of the track
     col = col + 140;
     // buttonText[12] = '\0'; // null terminate the string
@@ -413,28 +450,49 @@ void drawButtonPage()
     // strcat(buttonText,"Back");
     drawButton(box+1,butLen,col+butLen+10,row,TFT_YELLOW,"Back");  // track button
     if (ConfigMemHelper_config_data.Tracks[track].doorPresent) {
-    // buttonText[12] = '\0'; // null terminate the string
-      // strcat(buttonText, TrackTag[track]); 
-      // strcat(buttonText,"Door");
-      drawButton(box+2,butLen,col+butLen+butLen+20,row,TFT_GREEN,"Door");  // track button      
+      drawDoorButton(track);  // door button
     }    
   }
 }
 
+void drawDoorButton(int track)
+{ 
+  int butLen = 60;
+  int box = (TrackBox +(track*3));
+  int row = 1 + ((track-1) % 9) * 40;
+  int col = 145 + (HRES / 2) * (int)((track-1) / 9)+butLen+butLen+20;
+  
+  switch (ConfigMemHelper_config_data.producer_status[2+ConfigMemHelper_config_data.Tracks[track].servoNumber]) {
+
+    case EVENT_STATUS_UNKNOWN:
+      drawButton(box+2,butLen,col,row,TFT_YELLOW,"Door");  // door button 
+      break;
+
+    case EVENT_STATUS_SET:
+      drawButton(box+2,butLen,col,row,TFT_RED,"Door");  // door button
+      break;
+
+    case EVENT_STATUS_CLEAR:
+      drawButton(box+2,butLen,col,row,TFT_GREEN,"Door");  // door button
+      break;
+  }
+    
+}
 
 void drawDiagnosticPage()
 {
   activeScreen = 4;
   int butLen = 90;
   int hSpace = (HRES / 6);
-  int col = hSpace*3;
+  int col = 10;
   int vSpace = 40;
   int row = VRES - (vSpace * 1);
   // Clear the screen
   tft.fillScreen(TFT_BLACK);
+  // drawButton(12,butLen,col,row,TFT_GREEN,"Settings");  // go to settings page
+  drawButton(3,butLen,col,row,TFT_GREEN,"Configure");  // run configuration routine
+  col = col + hSpace*3;
   drawButton(14,butLen,col,row,TFT_GREEN,"TurnTable");  // go to home page
-  col = col + hSpace;
-  drawButton(12,butLen,col,row,TFT_GREEN,"Settings");  // go to settings page
   col = col + hSpace;
   drawButton(18,butLen,col,row,TFT_GREEN,"Buttons"); // go to config page
 
@@ -444,8 +502,6 @@ void drawDiagnosticPage()
   tft.setCursor((HRES/2)+50, 0, 2);
   drawTrackMatrix((HRES/2)+50);
 }
-
-
 
 
 void drawDiagnostics()
@@ -724,7 +780,7 @@ void drawTrack(int track, float angle)
   // tft.setTextColor(TFT_BLUE);
   tft.setTextDatum(MC_DATUM);  // Set text plotting reference datum to Middle Center 
   tft.setTextPadding(tft.textWidth("99", 2)); // get the width of the text in pixels
-  tft.drawString(TrackTag[track], CPtMidX, CPtMidY, 2);  // draw the short name of the track
+  tft.drawString(ConfigMemHelper_config_data.attributes.tracks[track].trackShort, CPtMidX, CPtMidY, 2);  // draw the short name of the track
   // tft.setTextColor(TFT_WHITE);
 
   // front position button (blue)
@@ -764,14 +820,21 @@ void drawTrack(int track, float angle)
 
 // need to integrate with door state determined by events consumed from other node
 
-    // if (Servos[ConfigMemHelper_config_data.Tracks[track].servoNumber].Status)
-    //     {
-    //     tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_GREEN);
-    //     }
-    //     else  
-        {
-        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_RED); 
-        } 
+    switch (ConfigMemHelper_config_data.producer_status[2+ConfigMemHelper_config_data.Tracks[track].servoNumber]) {
+
+      case EVENT_STATUS_UNKNOWN:
+        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_YELLOW);
+        break;
+
+      case EVENT_STATUS_SET:
+        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_RED);
+        break;
+
+      case EVENT_STATUS_CLEAR:
+        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_GREEN);
+        break;
+    }
+    
     setHotSpot8(box+2, BPt3X, BPt3Y, BPt4X, BPt4Y, BPt3X, BPt3Y, BPt4X, BPt4Y);
   }
 // else tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_BLACK); 

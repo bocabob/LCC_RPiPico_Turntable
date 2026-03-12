@@ -1,25 +1,24 @@
 {
     "configurations": [
         {
-            "name": "RPi Pico (RP2040)",
+            "name": "RPi Pico 2 (RP2040)",
             "includePath": [
                 "${workspaceRoot}/src/**",
                 "${workspaceFolder}/**",
                 "C:/GdriveBG/Arduino/libraries/**",
-                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/packages/rp2040/hardware/rp2040/**",
-                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/packages/rp2040/tools/**",
-                // "C:/Program Files/Arduino IDE/hardware/**",
-                // "C:/Program Files/Arduino IDE/libraries/**"
+                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/packages/rp2040/hardware/rp2040/5.5.1/**",
+                "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/packages/rp2040/tools/pqt-gcc/4.1.0-1aec55e/arm-none-eabi/include/**",
                 "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/libraries/**"
             ],
             "defines": [
                 "ARDUINO=10819",
                 "ARDUINO_ARCH_RP2040",
-                "ARDUINO_BOARD=Raspberry_Pi_Pico",
+                "ARDUINO_BOARD=\"Raspberry_Pi_Pico_2\"",
+                "ARDUINO_RASPBERRY_PI_PICO_2",
                 "__RP2040__",
-                "F_CPU=125000000L"
+                "F_CPU=150000000L"
             ],
-            // "compilerPath": "arm-none-eabi-gcc",
+            "compilerPath": "C:/Users/${env:USERNAME}/AppData/Local/Arduino15/packages/rp2040/tools/pqt-gcc/4.1.0-1aec55e/bin/arm-none-eabi-gcc.exe",
             "cStandard": "gnu17",
             "cppStandard": "gnu++17",
             "intelliSenseMode": "gcc-arm"

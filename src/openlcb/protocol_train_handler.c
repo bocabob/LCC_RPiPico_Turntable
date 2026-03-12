@@ -33,7 +33,7 @@
  * callbacks.
  *
  * @author Jim Kueneman
- * @date 4 Mar 2026
+ * @date 9 Mar 2026
  */
 
 #include "protocol_train_handler.h"
@@ -218,8 +218,18 @@ static void _load_query_function_reply(openlcb_statemachine_info_t *statemachine
 
 }
 
-    /** @brief Build a Controller Assign reply. */
-static void _load_controller_assign_reply(openlcb_statemachine_info_t *statemachine_info, uint8_t result) {
+    /**
+     * @brief Build a Controller Assign reply.
+     *
+     * @details On accept (result == 0x00) the reply is 3 bytes.
+     * On reject (result != 0x00) the reply includes the 6-byte Node ID of the
+     * current controller so the requester can negotiate a handoff.
+     * Per TrainControlTN Section 2.8.
+     */
+static void _load_controller_assign_reply(
+            openlcb_statemachine_info_t *statemachine_info,
+            uint8_t result,
+            node_id_t current_controller) {
 
     _load_reply_header(statemachine_info);
 
@@ -228,6 +238,12 @@ static void _load_controller_assign_reply(openlcb_statemachine_info_t *statemach
     OpenLcbUtilities_copy_byte_to_openlcb_payload(msg, TRAIN_CONTROLLER_CONFIG, 0);
     OpenLcbUtilities_copy_byte_to_openlcb_payload(msg, TRAIN_CONTROLLER_ASSIGN, 1);
     OpenLcbUtilities_copy_byte_to_openlcb_payload(msg, result, 2);
+
+    if (result != 0x00) {
+
+        OpenLcbUtilities_copy_node_id_to_openlcb_payload(msg, current_controller, 3);
+
+    }
 
     statemachine_info->outgoing_msg_info.valid = true;
 
@@ -509,6 +525,23 @@ static void _handle_set_speed(openlcb_statemachine_info_t *statemachine_info) {
         state->set_speed = speed;
         state->estop_active = false;
 
+        // TrainControlS 6.6: restart heartbeat when speed is non-zero,
+        // stop heartbeat when speed is zero (trains shall not send
+        // heartbeat if the last Set Speed is zero).
+        if (state->heartbeat_timeout_s > 0) {
+
+            if (!OpenLcbFloat16_is_zero(speed)) {
+
+                state->heartbeat_counter_100ms = state->heartbeat_timeout_s * 10;
+
+            } else {
+
+                state->heartbeat_counter_100ms = 0;
+
+            }
+
+        }
+
     }
 
     if (_interface && _interface->on_speed_changed) {
@@ -555,6 +588,9 @@ static void _handle_emergency_stop(openlcb_statemachine_info_t *statemachine_inf
         // Preserve direction, set speed magnitude to zero
         bool reverse = OpenLcbFloat16_get_direction(state->set_speed);
         state->set_speed = reverse ? FLOAT16_NEGATIVE_ZERO : FLOAT16_POSITIVE_ZERO;
+
+        // TrainControlS 6.6: trains shall not send heartbeat in E-Stop state
+        state->heartbeat_counter_100ms = 0;
 
     }
 
@@ -621,7 +657,7 @@ static void _handle_controller_config(openlcb_statemachine_info_t *statemachine_
 
         case TRAIN_CONTROLLER_ASSIGN: {
 
-            node_id_t requesting_id = OpenLcbUtilities_extract_node_id_from_openlcb_payload(msg, 2);
+            node_id_t requesting_id = OpenLcbUtilities_extract_node_id_from_openlcb_payload(msg, 3);
             bool accepted = true;
 
             if (state) {
@@ -630,6 +666,7 @@ static void _handle_controller_config(openlcb_statemachine_info_t *statemachine_
 
                     // No current controller, or same controller — accept
                     state->controller_node_id = requesting_id;
+                    state->controller_alias = msg->source_alias;
 
                 } else {
 
@@ -643,6 +680,7 @@ static void _handle_controller_config(openlcb_statemachine_info_t *statemachine_
                     if (accepted) {
 
                         state->controller_node_id = requesting_id;
+                        state->controller_alias = msg->source_alias;
 
                     }
 
@@ -650,7 +688,16 @@ static void _handle_controller_config(openlcb_statemachine_info_t *statemachine_
 
             }
 
-            _load_controller_assign_reply(statemachine_info, accepted ? 0x00 : 0xFF);
+            if (accepted) {
+
+                _load_controller_assign_reply(statemachine_info, 0x00, 0);
+
+            } else {
+
+                _load_controller_assign_reply(statemachine_info, 0xFF,
+                        state ? state->controller_node_id : 0);
+
+            }
 
             if (accepted && _interface && _interface->on_controller_assigned) {
 
@@ -664,11 +711,17 @@ static void _handle_controller_config(openlcb_statemachine_info_t *statemachine_
 
         case TRAIN_CONTROLLER_RELEASE: {
 
-            node_id_t releasing_id = OpenLcbUtilities_extract_node_id_from_openlcb_payload(msg, 2);
+            node_id_t releasing_id = OpenLcbUtilities_extract_node_id_from_openlcb_payload(msg, 3);
 
             if (state && state->controller_node_id == releasing_id) {
 
                 state->controller_node_id = 0;
+                state->controller_alias = 0;
+
+                // TrainControlS 6.6: if no assigned Controller, the Train
+                // shall continue operating as last commanded — stop the
+                // heartbeat so the countdown does not e-stop the train.
+                state->heartbeat_counter_100ms = 0;
 
                 if (_interface && _interface->on_controller_released) {
 
@@ -707,7 +760,7 @@ static void _handle_controller_config(openlcb_statemachine_info_t *statemachine_
 
         case TRAIN_CONTROLLER_CHANGED: {
 
-            node_id_t new_controller_id = OpenLcbUtilities_extract_node_id_from_openlcb_payload(msg, 2);
+            node_id_t new_controller_id = OpenLcbUtilities_extract_node_id_from_openlcb_payload(msg, 3);
             bool accepted = true;
 
             if (_interface && _interface->on_controller_changed_request) {
@@ -872,20 +925,23 @@ static void _handle_management(openlcb_statemachine_info_t *statemachine_info) {
 
         case TRAIN_MGMT_RESERVE: {
 
-            // Per conformance test TN 2.10: a second reserve without
-            // release shall return a fail code.  Only one reservation
-            // at a time is permitted.
+            // Per TrainControlS: a second reserve from the same source
+            // shall be accepted; a reserve from a different source while
+            // already reserved shall return a fail code.
             uint8_t result = 0;
 
             if (state) {
 
-                if (state->reserved_node_count > 0) {
+                node_id_t requesting_id = msg->source_id;
+
+                if (state->reserved_node_count > 0 && state->reserved_by_node_id != requesting_id) {
 
                     result = 0xFF;
 
                 } else {
 
                     state->reserved_node_count = 1;
+                    state->reserved_by_node_id = requesting_id;
 
                 }
 
@@ -902,6 +958,7 @@ static void _handle_management(openlcb_statemachine_info_t *statemachine_info) {
             if (state && state->reserved_node_count > 0) {
 
                 state->reserved_node_count--;
+                state->reserved_by_node_id = 0;
 
             }
 
@@ -911,12 +968,8 @@ static void _handle_management(openlcb_statemachine_info_t *statemachine_info) {
 
         case TRAIN_MGMT_NOOP: {
 
-            if (state && state->heartbeat_timeout_s > 0) {
-
-                state->heartbeat_counter_100ms = state->heartbeat_timeout_s * 10;
-
-            }
-
+            // Heartbeat reset is handled at dispatch entry
+            // (TrainControlS 6.6: any command/query clears heartbeat)
             break;
 
         }
@@ -983,7 +1036,15 @@ static void _handle_controller_config_reply(openlcb_statemachine_info_t *statema
             if (_interface && _interface->on_controller_assign_reply) {
 
                 uint8_t result = OpenLcbUtilities_extract_byte_from_openlcb_payload(msg, 2);
-                _interface->on_controller_assign_reply(node, result);
+                node_id_t current_controller = 0;
+
+                if (result != 0x00 && msg->payload_count >= 9) {
+
+                    current_controller = OpenLcbUtilities_extract_node_id_from_openlcb_payload(msg, 3);
+
+                }
+
+                _interface->on_controller_assign_reply(node, result, current_controller);
 
             }
 
@@ -1165,6 +1226,20 @@ void ProtocolTrainHandler_handle_train_command(openlcb_statemachine_info_t *stat
             statemachine_info->incoming_msg_info.msg_ptr, 0);
     uint8_t instruction = raw_instruction & ~TRAIN_INSTRUCTION_P_BIT;
 
+    // TrainControlS 6.6: any command or query from the Controller clears
+    // the active Heartbeat Request by restarting the countdown.
+    {
+
+        train_state_t *hb_state = statemachine_info->openlcb_node->train_state;
+
+        if (hb_state && hb_state->heartbeat_timeout_s > 0 && hb_state->heartbeat_counter_100ms > 0) {
+
+            hb_state->heartbeat_counter_100ms = hb_state->heartbeat_timeout_s * 10;
+
+        }
+
+    }
+
     switch (instruction) {
 
         case TRAIN_SET_SPEED_DIRECTION:
@@ -1213,22 +1288,22 @@ void ProtocolTrainHandler_handle_train_command(openlcb_statemachine_info_t *stat
 
     }
 
-    // Start listener forwarding for forwardable commands (only if P=0)
-    if (!(raw_instruction & TRAIN_INSTRUCTION_P_BIT)) {
+    // Start listener forwarding for forwardable commands.
+    // Both P=0 (from throttle) and P=1 (from chained consist) are forwarded.
+    // Forwarding of P=1 messages is REQUIRED per TrainControlS §6.5.
+    // Loop prevention: source-skip in _forward_to_next_listener() per §6.5
+    // and spanning-tree topology requirement per TN §2.6.5.
+    if (instruction == TRAIN_SET_SPEED_DIRECTION ||
+            instruction == TRAIN_SET_FUNCTION ||
+            instruction == TRAIN_EMERGENCY_STOP) {
 
-        if (instruction == TRAIN_SET_SPEED_DIRECTION ||
-                instruction == TRAIN_SET_FUNCTION ||
-                instruction == TRAIN_EMERGENCY_STOP) {
+        train_state_t *state = statemachine_info->openlcb_node->train_state;
 
-            train_state_t *state = statemachine_info->openlcb_node->train_state;
+        if (state && state->listener_count > 0) {
 
-            if (state && state->listener_count > 0) {
-
-                state->listener_enum_index = 0;
-                statemachine_info->incoming_msg_info.enumerate = true;
-                _forward_to_next_listener(statemachine_info);
-
-            }
+            state->listener_enum_index = 0;
+            statemachine_info->incoming_msg_info.enumerate = true;
+            _forward_to_next_listener(statemachine_info);
 
         }
 

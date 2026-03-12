@@ -41,6 +41,8 @@ void drawButton(int box, int32_t x, int32_t y, uint32_t fg_color,const char *str
 void drawHomePage();
 void drawButtonPage();
 void drawButtons();
+void drawDoorButton(int track);
+void drawFastClock(int hour, int minute);
 // void drawSetting(int i);
 void drawConfigPage();
 // void drawSteps();
