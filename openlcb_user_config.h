@@ -49,7 +49,7 @@
 // that work with contiguous blocks of event IDs.
 // Range counts must be at least 1 for valid array sizing.
 
-#define USER_DEFINED_PRODUCER_COUNT                  64
+#define USER_DEFINED_PRODUCER_COUNT                  96
 #define USER_DEFINED_PRODUCER_RANGE_COUNT            5
 #define USER_DEFINED_CONSUMER_COUNT                  64
 #define USER_DEFINED_CONSUMER_RANGE_COUNT            5
