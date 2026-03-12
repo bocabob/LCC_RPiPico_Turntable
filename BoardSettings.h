@@ -298,7 +298,7 @@ const uint8_t accPin = 25;                           // Pin for accessory output
 #define BlueLevel 10  // bridge shack
 #define GreenLevel 0
 
-#define USE_SENSORS true  // uncomment for LocoNet sensor reporting
+// #define USE_SENSORS true  // uncomment for LocoNet sensor reporting
 
 #define UNUSED_PIN 127
 

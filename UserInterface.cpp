@@ -316,14 +316,28 @@ void drawFastClock(int hour, int minute)
   switch (activeScreen)
   {
   case  1:
-    tft.setCursor(HRES/8, (VRES/2)-30);
-    tft.print(hour);
-    tft.print(":");
+  {
+    String TimeText;
+    TimeText+= "Fast Clock: ";
+    TimeText+= hour;
+    TimeText+= ":";
     if (minute < 10) {
-      tft.print("0"); // Add leading zero for minutes less than 10
+      TimeText+= "0"; // Add leading zero for minutes less than 10
     }
-    tft.print(minute);
+    TimeText+= minute;
+    char buffer[30];
+    TimeText.toCharArray(buffer,30);
+    tft.drawString(buffer, 5, (VRES/2)-30, 4);
+
+    // tft.setCursor(HRES/8, (VRES/2)-30);
+    // tft.print(hour);
+    // tft.print(":");
+    // if (minute < 10) {
+    //   tft.print("0"); // Add leading zero for minutes less than 10
+    // }
+    // tft.print(minute);
     break;
+  }
   case 2:
     tft.setCursor(HRES/2, (VRES-30));
     tft.print(hour);
