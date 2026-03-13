@@ -142,19 +142,26 @@ void TurntableCallback(uint16_t callin) {
   else 
   if (index < NUM_TABLE_EVENTS + NUM_TRACK_EVENTS){
     index = index - NUM_TABLE_EVENTS;
-    uint8_t track = index / 2;
-    uint8_t outputState = index % 2;
-    if (outputState) {
+    uint8_t track = index / 4;
+    uint8_t outputState = index % 4;
+    switch (outputState) {
+      case 0:
       // move back side to track
+        MoveToTrack(track,0);
+        break;
+      case 1:
       // move to track backward
-      MoveToTrack(track,0);
-    }
-    else {
-      // move front side to track
-      // move to track foreward
-      MoveToTrack(track,32);
-    }
-      
+        MoveToTrack(track,32);
+        break;
+      case 2:
+        // track occupancy toggle, just redraw track with new occupancy state
+        // drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        break;
+      case 3:
+        // track railcom toggle, just redraw track with new railcom state
+        // drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        break;
+    }      
       // toggle door to track w/redraw
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
@@ -167,7 +174,7 @@ void TurntableCallback(uint16_t callin) {
   }
   else {    
 // skip Door events as they are produced, not consumed
-    index = index - NUM_DOOR_EVENTS;
+    index = index - (NUM_TABLE_EVENTS + NUM_TRACK_EVENTS);
     if (index < NUM_LUM_EVENTS){
         switch (index) { //, , , , 
           case 0:  //   CEID(eidBridge)

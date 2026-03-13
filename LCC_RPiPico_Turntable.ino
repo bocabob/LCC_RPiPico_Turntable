@@ -93,7 +93,7 @@ Other pins for relays and LEDs may be used.
 #include "UserInterface.h"
 
 // #define NODE_ID 0x050101010777
-#define NODE_ID 0x050101019410      // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
+#define NODE_ID 0x050101019411      // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
 // #define NODE_ADDRESS  5,1,1,1,94,0x08   // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
 
 
@@ -253,11 +253,11 @@ int index = 0;
   index++;
 
 
-  for (int i = index; i < ConfigMemHelper_config_data.attributes.TrackCount+index; i++) {
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Front), ConfigMemHelper_config_data.consumer_status[i*4]); // need to read the state from the NVM to know if it is on/off/unknown when registering the consumer event ID
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Back), ConfigMemHelper_config_data.consumer_status[1+i*4]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Occupancy), ConfigMemHelper_config_data.consumer_status[2+i*4]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].RailCom), ConfigMemHelper_config_data.consumer_status[3+i*4]);
+  for (int i = 0; i < ConfigMemHelper_config_data.attributes.TrackCount; i++) {
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Front), ConfigMemHelper_config_data.consumer_status[index+i*4]); // need to read the state from the NVM to know if it is on/off/unknown when registering the consumer event ID
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Back), ConfigMemHelper_config_data.consumer_status[index+1+i*4]);
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Occupancy), ConfigMemHelper_config_data.consumer_status[index+2+i*4]);
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].RailCom), ConfigMemHelper_config_data.consumer_status[index+3+i*4]);
   }
   index += ConfigMemHelper_config_data.attributes.TrackCount*4;
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidBridge), ConfigMemHelper_config_data.consumer_status[index]);

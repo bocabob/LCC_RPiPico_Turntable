@@ -422,7 +422,7 @@ void moveToPosition(long steps, uint8_t phaseSwitch) {
 }
 
 void MoveToTrack(int i,uint8_t Direction){ 
-    if (i > MAX_TRACKS) return;
+    if (i >= MAX_TRACKS) return;
 #ifdef USE_SENSORS      
       // LN_STATUS lnStatus = LocoNet.reportSensor(ConfigMemHelper_config_data.Tracks[ConfigMemHelper_config_data.CurrentTrack].address,0);     
       // reportSensor(&LNbus,ConfigMemHelper_config_data.Tracks[ConfigMemHelper_config_data.CurrentTrack].address,0);       
