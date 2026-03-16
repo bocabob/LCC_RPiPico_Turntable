@@ -900,7 +900,7 @@ bool OpenLcbMainStatemachine_handle_outgoing_openlcb_message(void) {
             if (!_statemachine_info.incoming_msg_info.msg_ptr ||
                     !_statemachine_info.incoming_msg_info.msg_ptr->state.loopback) {
 
-                _loopback_to_siblings();
+                // _loopback_to_siblings();
 
             }
 

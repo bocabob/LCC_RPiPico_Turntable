@@ -139,8 +139,7 @@ void TurntableCallback(uint16_t callin) {
           break;
         }
   }
-  else 
-  if (index < NUM_TABLE_EVENTS + NUM_TRACK_EVENTS){
+ else if (index < NUM_TABLE_EVENTS + ConfigMemHelper_config_data.attributes.TrackCount * 4) {
     index = index - NUM_TABLE_EVENTS;
     uint8_t track = index / 4;
     uint8_t outputState = index % 4;
@@ -155,11 +154,15 @@ void TurntableCallback(uint16_t callin) {
         break;
       case 2:
         // track occupancy toggle, just redraw track with new occupancy state
-        // drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        // if (fullTurnSteps != 0) {
+        //   drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        // }
         break;
       case 3:
         // track railcom toggle, just redraw track with new railcom state
-        // drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        // if (fullTurnSteps != 0) {
+        //   drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        // }
         break;
     }      
       // toggle door to track w/redraw
@@ -169,12 +172,14 @@ void TurntableCallback(uint16_t callin) {
         // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            }
         // else
         // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            }
-        drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        if (fullTurnSteps != 0) {
+          drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        }
       }
   }
   else {    
 // skip Door events as they are produced, not consumed
-    index = index - (NUM_TABLE_EVENTS + NUM_TRACK_EVENTS);
+    index = index - (NUM_TABLE_EVENTS + ConfigMemHelper_config_data.attributes.TrackCount * 4);
     if (index < NUM_LUM_EVENTS){
         switch (index) { //, , , , 
           case 0:  //   CEID(eidBridge)
@@ -633,7 +638,9 @@ void drawTurnTable()
   tft.drawSmoothCircle(xC, yC, rad, fg_color,  bg_color);
   // tft.drawCircle(xC, yC, rad+1, TFT_WHITE);
 
-  drawBridge((absPosition(getCurrentPosition())*360)/fullTurnSteps);
+  if (fullTurnSteps != 0) {
+    drawBridge((absPosition(getCurrentPosition())*360)/fullTurnSteps);
+  }
 }
 
 
@@ -698,7 +705,9 @@ float SPt3Y = CPtShackY + (SineAngle * side);
 // draw bridge shack
 
 
-  drawShack((absPosition(getCurrentPosition())*360)/fullTurnSteps);
+  if (fullTurnSteps != 0) {
+    drawShack((absPosition(getCurrentPosition())*360)/fullTurnSteps);
+  }
 
 // tft.drawWideLine(CPtShackX, CPtShackY, SPt1X, SPt1Y, 2, TFT_RED);
 // tft.drawWideLine(SPt1X, SPt1Y, SPt2X, SPt2Y, 2, TFT_RED);
@@ -752,7 +761,9 @@ if (pixelsOn)
 void drawTracks()
 {
   for (int i = 1; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
-    drawTrack(i,((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
+    if (fullTurnSteps != 0) {
+      drawTrack(i, ((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
+    }
     // Serial.print(i);
     // Serial.print("  ");
     // Serial.print((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps);

@@ -546,8 +546,10 @@ void loop1() {
         lastRunningState = isStepperRunning();
         if (!lastRunningState) { 
           disableStepper();
-          if (activeScreen == 1) drawBridge(absPosition(getCurrentPosition())*360/fullTurnSteps); 
+          if ((activeScreen == 1) && (fullTurnSteps != 0)) {
+            drawBridge(absPosition(getCurrentPosition())*360/fullTurnSteps);
           }
+        }
       }
     #endif
 

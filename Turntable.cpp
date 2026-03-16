@@ -926,7 +926,9 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       break;
     case 2:      // bridge shack
       TogglePixels();
-      drawShack((absPosition(stepper.currentPosition())*360)/fullTurnSteps);
+      if (fullTurnSteps != 0) {
+        drawShack((absPosition(stepper.currentPosition())*360)/fullTurnSteps);
+      }
       break;
     case 3:      // find reference positions
       initiateReferences();
@@ -958,12 +960,14 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
         // MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            
-        // drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        // if (fullTurnSteps != 0) drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
         switch (activeScreen)
         {
         case  1:
           /* code */
-          drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+          if (fullTurnSteps != 0) {
+            drawTrack(track, ((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+          }
           break;
         case 2:
           /* code */
@@ -981,12 +985,12 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
         // MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            
-        // drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+        // if (fullTurnSteps != 0) drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
         switch (activeScreen)
         {
         case  1:
           /* code */
-          drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+          if (fullTurnSteps != 0) drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
           break;
         case 2:
           /* code */
@@ -1283,7 +1287,9 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
                 {
                 case  1:
                   /* code */
-                  drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+                  if (fullTurnSteps != 0) {
+                    drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
+                  }
                   break;
                 case 2:
                   /* code */

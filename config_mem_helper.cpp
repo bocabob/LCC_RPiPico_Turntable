@@ -245,14 +245,14 @@ void Set_Application_Values_From_Config(openlcb_node_t *openlcb_node, config_mem
 */
     // setTrackDefaults();
     
-  for (int i = 0; i <= config->attributes.TrackCount; i++) {
+  for (int i = 0; i < config->attributes.TrackCount; i++) {
     config->Tracks[i].trackFront = swap_endian32(config->attributes.tracks[i].steps); // Default address
     config->Tracks[i].trackBack = config->Tracks[i].trackFront + (swap_endian32(config->attributes.FullTurnSteps) / 2); // Default address
     config->Tracks[i].doorPresent = false; // Default address
     config->Tracks[i].servoNumber = 0; // Default address
   }
 
-  for (int d = 0; d <= config->attributes.DoorCount; d++) { 
+  for (int d = 0; d < config->attributes.DoorCount; d++) { 
     if (config->attributes.doors[d].TrackLocation > 0) {
       config->Tracks[config->attributes.doors[d].TrackLocation].doorPresent = true;
       config->Tracks[config->attributes.doors[d].TrackLocation].servoNumber = d;

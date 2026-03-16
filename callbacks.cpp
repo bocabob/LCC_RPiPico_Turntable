@@ -143,7 +143,7 @@ void Callbacks_on_consumed_event_identified(openlcb_node_t *openlcb_node, uint16
     
     ConfigMemHelper_config_data.consumer_status[index] = openlcb_node->consumers.list[index].status;
 
-    TurntableCallback(index);
+    // TurntableCallback(index);
   }
 }
 
