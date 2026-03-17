@@ -71,6 +71,8 @@ void RPiPicoCanDriver_setup(void) {
   MCP2517_SPI.begin(true);
   // Setup for 125kHz
   ACAN2517Settings settings(ACAN2517Settings::OSC_40MHz, 125UL * 1000UL);
+  settings.mDriverTransmitFIFOSize = 10;  // Add this line
+
 
 #ifndef LOG_SETUP
   can.begin(settings, [] {

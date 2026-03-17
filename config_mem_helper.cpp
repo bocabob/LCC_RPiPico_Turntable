@@ -30,6 +30,19 @@ extern long absPosition(long position);
 
 extern bool stepsSet;
 
+void ConfigMemHelper_mirror_write(uint32_t address, uint16_t count, configuration_memory_buffer_t *buffer) {
+
+  if (address >= sizeof(config_mem_t))
+    return;
+
+  if (address + count > sizeof(config_mem_t))
+    count = (uint16_t)(sizeof(config_mem_t) - address);
+
+  uint8_t *byte_array = (uint8_t*) &ConfigMemHelper_config_data;
+  memcpy(byte_array + address, buffer, count);
+
+}
+
 bool ConfigMemHelper_toggle_log_access(void) {
 
   ConfigMemHelper_log_access = !ConfigMemHelper_log_access;
@@ -289,6 +302,9 @@ uint16_t ConfigMemHelper_config_mem_write(openlcb_node_t *openlcb_node, uint32_t
   byte_array += address;
   memcpy(byte_array, buffer, count);
 
+  // Sync application state (servo ranges, event states, etc.) from updated config
+  Set_Application_Values_From_Config(openlcb_node, &ConfigMemHelper_config_data);
+
   // Now write to the NVM
   return RPiPicoDrivers_config_mem_write(openlcb_node, address, count, buffer);
 
@@ -507,15 +523,31 @@ void ConfigMemHelper_clear_config_mem(void) {
   _direct_access = false;
 }
 
+bool ConfigMemHelper_nvm_is_accessible(void) {
+
+  configuration_memory_buffer_t buffer;
+
+  _direct_access = true;
+  uint16_t bytes_read = ConfigMemHelper_config_mem_read(NULL, 0, 1, &buffer);
+  _direct_access = false;
+
+  return (bytes_read == 1);
+}
+
 bool ConfigMemHelper_is_config_mem_reset(void) {
 
   configuration_memory_buffer_t buffer;
-  
+
   _direct_access = true;
 
-  ConfigMemHelper_config_mem_read(NULL, 0, 1, &buffer);
+  uint16_t bytes_read = ConfigMemHelper_config_mem_read(NULL, 0, 1, &buffer);
 
   _direct_access = false;
+
+  if (bytes_read != 1) {
+    Serial.println("ConfigMemHelper_is_config_mem_reset: read failed, cannot determine NVM state");
+    return false;
+  }
 
   return (buffer[0] == 0xFF);
 }

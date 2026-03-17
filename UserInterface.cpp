@@ -317,7 +317,7 @@ tft.setTextPadding(0); // set to zero
 
 void drawFastClock(int hour, int minute)
 {
-  // tft.setTextDatum(TC_DATUM);  // Set text plotting reference datum to Top Centre (TC)
+  tft.setTextDatum(ML_DATUM);  // Set text plotting reference datum to Top Centre (TC)
   // tft.setTextPadding(100); // get the width of the text in pixels
   // tft.drawString("Clock", HRES/2, VRES/2, 4);
   // tft.setTextPadding(0); // set to zero

@@ -148,6 +148,12 @@ static const openlcb_config_t openlcb_config = {
 void _check_for_nvm_initialization(void) {
 
   Serial.println("Checking for initialized NVM");
+
+  if (!ConfigMemHelper_nvm_is_accessible()) {
+    Serial.println("FATAL: NVM not accessible - check I2C wiring, address (0x50), and pullups on SDA/SCL");
+    while (true) { delay(1000); }  // halt
+  }
+
   // If the first byte of the configuration memory is 0xFF then the space has never been accessed (fresh firmware load) and need to be initialized to 0x00
   if (ConfigMemHelper_is_config_mem_reset()) {
    
@@ -185,38 +191,54 @@ bool OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_end
 */
 bool produceLightIn()
 {
-// Toggle interior lights
-ToggleProducerEventStatus(0);
-return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidInterior));
+  if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidInterior))) {
+  // Toggle interior lights
+  ToggleProducerEventStatus(ConfigMemHelper_config_data.attributes.DoorCount+2);
+  return true;
+  }
+  return false;
 }
 bool produceLightEx()
 {
-// Toggle exterior lights
-ToggleProducerEventStatus(1);
-return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior));
+  if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior))) {
+  // Toggle exterior lights
+  ToggleProducerEventStatus(ConfigMemHelper_config_data.attributes.DoorCount+3);
+  return true;
+  }
+  return false;
 }
 bool produceOpenAll()
 {
-// open all doors
-for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
-ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_CLEAR;  // clear all the individual door events in the NVM so that when the producer event ID is sent it will be correct for the new state of the doors (on)
-}
-return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.OpenAll));
+  if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.OpenAll))) {
+  // open all doors
+  for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
+  ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_CLEAR;  // clear all the individual door events in the NVM so that when the producer event ID is sent it will be correct for the new state of the doors (on)
+  }
+  return true;
+  }
+  return false;
 }
 bool produceCloseAll()
 {
-// close all doors
-for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
-ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_SET;  // set all the individual door events in the NVM so that when the producer event ID is sent it will be correct for the new state of the doors (on)
+  if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.CloseAll))) {
+  // close all doors
+  for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
+  ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_SET;  // set all the individual door events in the NVM so that when the producer event ID is sent it will be correct for the new state of the doors (on)
+  }
+  return true;
+  }
+  return false;
 }
-return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.CloseAll));
-}
+
 bool produceDoor(int servo)
 {
-// Toggle the state of the door event in the NVM so that when the producer event ID is sent it will be correct for the new state of the door (on/off)
-ToggleProducerEventStatus(2 + servo);
+  if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[servo].eidToggle))) {
+  // Toggle the state of the door event in the NVM so that when the producer event ID is sent it will be correct for the new state of the door (on/off)
+  ToggleProducerEventStatus(2 + servo);
     
-return OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[servo].eidToggle));
+  return true;
+  }
+  return false;
 }
 
 void ToggleProducerEventStatus(int eventIndex)

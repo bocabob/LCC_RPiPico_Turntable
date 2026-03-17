@@ -39,7 +39,7 @@
 
 #include "../../BoardSettings.h"
 
-#define PRINT_DEBUG_RPI_PICO_DRIVERS
+// #define PRINT_DEBUG_RPI_PICO_DRIVERS
 
 #ifdef ARDUINO_COMPATIBLE
 // TODO:  include any header files the Raspberry Pi Pico need to compile under Arduino/PlatformIO
@@ -57,6 +57,9 @@
 #include "../openlcb/openlcb_config.h"
 #include "../openlcb/openlcb_types.h"
 #include "../openlcb/openlcb_defines.h"
+
+// RAM mirror — keeps ConfigMemHelper_config_data in sync with every NVM write
+extern "C" void ConfigMemHelper_mirror_write(uint32_t address, uint16_t count, configuration_memory_buffer_t *buffer);
 #include "../utilities/mustangpeak_string_helper.h"
 
 #include "Wire.h"
@@ -292,6 +295,7 @@ uint16_t RPiPicoDrivers_config_mem_write(openlcb_node_t *openlcb_node, uint32_t 
     return 0;
   }
 
+  ConfigMemHelper_mirror_write(address, count, buffer);
   return count;
 
 #endif  // defined(USE_INTERNAL_FLASH_STORAGE) && defined(ARDUINO_COMPATIBLE)
@@ -329,6 +333,7 @@ uint16_t RPiPicoDrivers_config_mem_write(openlcb_node_t *openlcb_node, uint32_t 
     }
   #endif
 
+  ConfigMemHelper_mirror_write(address, count, buffer);
   return count;
 #endif  // defined(USE_I2C_STORAGE) && defined(ARDUINO_COMPATIBLE)
 

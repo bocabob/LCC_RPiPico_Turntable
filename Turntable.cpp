@@ -36,10 +36,10 @@ extern config_mem_t ConfigMemHelper_config_data;
 
 extern void writeNVMdefaults();
 extern void readNVM();
-extern void produceLightIn();
-extern void produceLightEx();
-extern void produceOpenAll();
-extern void produceCloseAll();
+extern bool produceLightIn();
+extern bool produceLightEx();
+extern bool produceOpenAll();
+extern bool produceCloseAll();
 extern void produceDoor(int servo);
 extern long getSteps();
 extern void writeSteps(long steps);
@@ -944,18 +944,18 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       BumpBar();
       break;      
     case 7:      // toggle RH interior lights
-      produceLightIn();
+      for (int _retry = 0; _retry < 4 && !produceLightIn(); _retry++);
       // ToggleLight(0);
       break;
     case 8:      // toggle RH exterior lights
-      produceLightEx();
+      for (int _retry = 0; _retry < 4 && !produceLightEx(); _retry++);
       // ToggleLight(1);
       break;    
     case 9:      // button 5
       IncrementTrack();
       break;      
     case 10:      // open all doors 
-      produceOpenAll();    
+      for (int _retry = 0; _retry < 4 && !produceOpenAll(); _retry++);
       for (int track = 0; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
@@ -980,7 +980,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       }
       break;
     case 11:      // close all doors 
-      produceCloseAll();
+      for (int _retry = 0; _retry < 4 && !produceCloseAll(); _retry++);
       for (int track = 0; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
