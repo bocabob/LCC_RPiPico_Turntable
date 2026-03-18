@@ -32,13 +32,21 @@
  * Time event IDs, Train Control instruction bytes, and well-known events.
  *
  * @author Jim Kueneman
- * @date 9 Mar 2026
+ * @date 17 Mar 2026
  */
 
 // This is a guard condition so that contents of this file are not included
 // more than once.
 #ifndef __OPENLCB_OPENLCB_DEFINES__
 #define __OPENLCB_OPENLCB_DEFINES__
+
+// ---------------------------------------------------------------------------
+// Library version
+// ---------------------------------------------------------------------------
+#define OPENLCB_C_LIB_VERSION_MAJOR  1
+#define OPENLCB_C_LIB_VERSION_MINOR  1
+#define OPENLCB_C_LIB_VERSION_PATCH  0
+#define OPENLCB_C_LIB_VERSION        "1.1.0"
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -1080,6 +1088,12 @@
     /** @brief Maximum length of user description (64 bytes including null) */
 #define CONFIG_MEM_ACDI_USER_DESCRIPTION_LEN 64
 
+    /** @brief Offset of user name in Configuration Memory (0xFD) address space */
+#define CONFIG_MEM_CONFIG_USER_NAME_OFFSET 0x00000000
+
+    /** @brief Offset of user description in Configuration Memory (0xFD) address space */
+#define CONFIG_MEM_CONFIG_USER_DESCRIPTION_OFFSET 63   /* CONFIG_MEM_ACDI_USER_NAME_LEN (63) */
+
     /** @} */ // end of acdi_user_layout
 
 /**
@@ -1159,7 +1173,7 @@
  */
 
     /** @brief Maximum number of enumeration keys available for user/application */
-#define MAX_INTERNAL_ENUM_KEYS_VALUES 4
+#define MAX_INTERNAL_ENUM_KEYS_VALUES 6
 
     /** @brief Maximum number of internal system enumeration keys */
 #define MAX_USER_ENUM_KEYS_VALUES 4
@@ -1190,6 +1204,12 @@
 
     /** @brief Enumeration key used by datagram timeout scanner */
 #define DATAGRAM_TIMEOUT_ENUM_KEY (MAX_USER_ENUM_KEYS_VALUES + 3)
+
+    /** @brief Enumeration key used by sibling dispatch in main state machine */
+#define OPENLCB_SIBLING_DISPATCH_NODE_ENUMERATOR_INDEX (MAX_USER_ENUM_KEYS_VALUES + 4)
+
+    /** @brief Enumeration key used by sibling dispatch in login state machine */
+#define OPENLCB_LOGIN_SIBLING_DISPATCH_NODE_ENUMERATOR_INDEX (MAX_USER_ENUM_KEYS_VALUES + 5)
 
     /** @} */ // end of node_enum_keys
 

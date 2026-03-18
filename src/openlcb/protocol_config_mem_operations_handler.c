@@ -44,7 +44,6 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>
-#include <stdio.h> // printf
 #include <string.h>
 
 #include "openlcb_types.h"

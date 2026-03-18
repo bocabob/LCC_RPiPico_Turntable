@@ -50,6 +50,8 @@
 #include "openlcb_user_config.h"
 #elif __has_include("../../openlcb_user_config.h")
 #include "../../openlcb_user_config.h"
+#elif __has_include("../../../openlcb_user_config.h")
+#include "../../../openlcb_user_config.h"
 #else
 #error "openlcb_user_config.h not found. Copy templates/openlcb_user_config.h to your project include path."
 #endif
@@ -122,15 +124,6 @@
 #error "USER_DEFINED_CONSUMER_RANGE_COUNT must be defined in openlcb_user_config.h"
 #endif
 
-    /** @brief Config Memory address for user-defined node name */
-#ifndef USER_DEFINED_CONFIG_MEM_USER_NAME_ADDRESS
-#error "USER_DEFINED_CONFIG_MEM_USER_NAME_ADDRESS must be defined in openlcb_user_config.h"
-#endif
-
-    /** @brief Config Memory address for user description */
-#ifndef USER_DEFINED_CONFIG_MEM_USER_DESCRIPTION_ADDRESS
-#error "USER_DEFINED_CONFIG_MEM_USER_DESCRIPTION_ADDRESS must be defined in openlcb_user_config.h"
-#endif
 
     /** @brief Maximum number of train nodes that can be allocated */
 #ifndef USER_DEFINED_TRAIN_NODE_COUNT
@@ -206,8 +199,16 @@
     /** @brief SNIP message payload size (also covers Events with Payload) */
 #define LEN_MESSAGE_BYTES_SNIP 256
 
-    /** @brief STREAM message payload size */
-#define LEN_MESSAGE_BYTES_STREAM 512
+    /** @brief STREAM message payload size (user-tunable via USER_DEFINED_STREAM_BUFFER_LEN) */
+#define LEN_MESSAGE_BYTES_STREAM USER_DEFINED_STREAM_BUFFER_LEN
+
+    /** @brief Sibling dispatch buffer payload size.  Clamped to SNIP size if
+     *         USER_DEFINED_STREAM_BUFFER_LEN is set below 256. */
+#if LEN_MESSAGE_BYTES_STREAM < LEN_MESSAGE_BYTES_SNIP
+#define LEN_MESSAGE_BYTES_SIBLING_DISPATCH LEN_MESSAGE_BYTES_SNIP
+#else
+#define LEN_MESSAGE_BYTES_SIBLING_DISPATCH LEN_MESSAGE_BYTES_STREAM
+#endif
 
     /** @brief Event ID size in bytes */
 #define LEN_EVENT_ID 8
@@ -315,8 +316,11 @@
         /** @brief SNIP message payload buffer (256 bytes) */
     typedef uint8_t payload_snip_t[LEN_MESSAGE_BYTES_SNIP];
 
-        /** @brief STREAM message payload buffer (512 bytes) */
+        /** @brief STREAM message payload buffer (USER_DEFINED_STREAM_BUFFER_LEN bytes) */
     typedef uint8_t payload_stream_t[LEN_MESSAGE_BYTES_STREAM];
+
+        /** @brief Sibling dispatch payload buffer (clamped to >= 256 bytes) */
+    typedef uint8_t payload_dispatcher_t[LEN_MESSAGE_BYTES_SIBLING_DISPATCH];
 
     /** @} */ // end of payload_buffer_types
 
@@ -727,6 +731,14 @@
         payload_stream_t openlcb_payload;
 
     } openlcb_stream_message_t;
+
+        /** @brief Message with sibling-dispatch-sized payload (clamped to >= 256 bytes). */
+    typedef struct {
+
+        openlcb_msg_t openlcb_msg;
+        payload_dispatcher_t openlcb_payload;
+
+    } openlcb_dispatcher_message_t;
 
         /** @brief Outgoing message context for the main state machine. */
     typedef struct {

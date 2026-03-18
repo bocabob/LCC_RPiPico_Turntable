@@ -39,7 +39,7 @@
 #include <assert.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h> // printf
+#include <stddef.h>
 
 #include "openlcb_types.h"
 #include "openlcb_defines.h"
@@ -295,7 +295,7 @@ static void _generate_event_ids(openlcb_node_t *openlcb_node) {
 
     }
 
-    // indexer = 0;
+    indexer = 0;
     openlcb_node->producers.count = 0;
     for (int j = 0; j < openlcb_node->parameters->producer_count_autocreate; j++) {
 
@@ -468,5 +468,16 @@ void OpenLcbNode_reset_state(void) {
         _openlcb_nodes.node[i].state.initialized = false;
 
     }
+
+}
+
+    /**
+     * @brief Returns the number of allocated nodes.
+     *
+     * @return Current allocated node count.
+     */
+uint16_t OpenLcbNode_get_count(void) {
+
+    return _openlcb_nodes.count;
 
 }
