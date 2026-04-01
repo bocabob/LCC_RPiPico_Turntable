@@ -368,7 +368,14 @@ void moveHome() {   // Function to find the home position.
 
 // Function to move to the indicated position.
 void moveToPosition(long steps, uint8_t phaseSwitch) {
-  long moveSteps;    
+  // Reject any new move request while the stepper is already running.
+  // Starting a second move mid-travel recalculates the target from the
+  // instantaneous (not final) position, corrupting step-position registration.
+  if (isStepperRunning()) {
+    Serial.println(F("Stepper busy – moveToPosition ignored"));
+    return;
+  }
+  long moveSteps;
   if (steps != lastStep) {
     Serial.print(F("move to step postion "));
     Serial.print(steps);
@@ -758,6 +765,10 @@ bool getBridgeState() {   // Function to debounce and get the state of the bridg
 
 
 void initiateHoming() {   // Function to reset home state, triggering homing to happen
+  // if (isStepperRunning()) {
+  //   Serial.println(F("Stepper busy – initiateHoming ignored"));
+  //   return;
+  // }
   homed = 0;
   calibrating = false;
   calibrationPhase = 1;
@@ -769,7 +780,11 @@ void initiateHoming() {   // Function to reset home state, triggering homing to 
 }
 
 void initiateStepCount() {    // Function to trigger calibration to begin
-  calibrating = true;  
+  // if (isStepperRunning()) {
+  //   Serial.println(F("Stepper busy – initiateStepCount ignored"));
+  //   return;
+  // }
+  calibrating = true;
   Serial.println(F("CALIBRATION: Phase 2, counting full turn steps..."));
   calibrationPhase = 2;
   stepper.enableOutputs();
@@ -779,6 +794,10 @@ void initiateStepCount() {    // Function to trigger calibration to begin
 }
 
 void initiateReferences() {    // Function to trigger calibration to begin
+  // if (isStepperRunning()) {
+  //   Serial.println(F("Stepper busy – initiateReferences ignored"));
+  //   return;
+  // }
   calibrating = true;
   ConfigMemHelper_config_data.attributes.ReferenceCount = 0;
   stepper.enableOutputs();
@@ -918,7 +937,8 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
   // tft.print("X = ");tft.print(X_Coord);tft.print("   ");
   // tft.setCursor(300, 300,  2);
   // tft.print("Y = ");tft.print(Y_Coord);tft.print("   ");
-#endif  
+#endif
+
   if (boxCode <= PageBoxes) { // main screen buttons
     switch (boxCode) {
     case 1:      // bridge 
@@ -956,7 +976,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       break;      
     case 10:      // open all doors 
       for (int _retry = 0; _retry < 4 && !produceOpenAll(); _retry++);
-      for (int track = 0; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
+      for (int track = 1; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
         // MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            
@@ -981,7 +1001,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       break;
     case 11:      // close all doors 
       for (int _retry = 0; _retry < 4 && !produceCloseAll(); _retry++);
-      for (int track = 0; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
+      for (int track = 1; track <= ConfigMemHelper_config_data.attributes.TrackCount; track++) {
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
       {
         // MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            
@@ -1002,8 +1022,13 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       }
       }
       break;    
-    case 12:      // settings page
-      // drawSettingsPage();
+    case 12:      // reset to default settings
+      
+      ScreenPrint(F(" Resetting to defaults "), HRES/2, VRES/2, 2);
+      // ConfigMemHelper_clear_config_mem();  // reset all EEPROM to initalized nulls 0x00
+      // delay(6000);
+      ConfigMemHelper_reset_and_write_default(OpenLcbUserConfig_node_id);  // reset all EEPROM to CDI defined defaults
+
       break;
     case 13:      // diagnostics page
       drawDiagnosticPage();

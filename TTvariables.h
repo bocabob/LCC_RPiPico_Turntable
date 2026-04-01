@@ -1,20 +1,17 @@
 // Variables and Declarations
 
+#ifndef VARIABLES_H
+#define VARIABLES_H
 
 #include "BoardSettings.h"
-// #include <LocoNetStreamRP2040.h>
 
-#include <SPI.h>    // Call up the TFT driver library
-#include <TFT_eSPI.h>      // Hardware-specific library
-// #include <TFT_Touch.h>    // Call up touch screen library
+#include <SPI.h>
+#include <TFT_eSPI.h>
+// #include <TFT_Touch.h>
 #include "src/application_drivers/my_bb_captouch.h"
 // #include "TAMC_GT911.h"
 
-
 // extern TAMC_GT911 tp = TAMC_GT911(TOUCH_SDA, TOUCH_SCL, TOUCH_INT, TOUCH_RST, HRES, VRES);
-
-#ifndef VARIABLES_H
-#define VARIABLES_H
 
 // extern AccelStepper stepper;
 

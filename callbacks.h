@@ -62,7 +62,7 @@ extern "C"
 
     extern void Callbacks_operations_request_factory_reset(openlcb_statemachine_info_t *statemachine_info, config_mem_operations_request_info_t *config_mem_operations_request_info);
 
-    extern void Callbacks_write_firemware(openlcb_statemachine_info_t *statemachine_info, config_mem_write_request_info_t *config_mem_write_request_info);
+    extern void Callbacks_write_firmware(openlcb_statemachine_info_t *statemachine_info, config_mem_write_request_info_t *config_mem_write_request_info);
     
     extern void Callbacks_freeze(openlcb_statemachine_info_t *statemachine_info, config_mem_operations_request_info_t *config_mem_operations_request_info);
     
@@ -82,5 +82,12 @@ extern "C"
 #ifdef __cplusplus
 }
 #endif /* __cplusplus */
+
+// Deferred EEPROM write flag – set to true whenever the RAM config changes and
+// needs to be persisted.  The 100ms timer callback drains it every ~3 seconds.
+// Declared outside extern "C" because volatile bool is a C++ type.
+#ifdef __cplusplus
+extern volatile bool _config_dirty;
+#endif
 
 #endif /* __CALLBACKS__ */

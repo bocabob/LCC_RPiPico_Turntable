@@ -141,7 +141,11 @@ void TurntableCallback(uint16_t callin) {
   }
  else if (index < NUM_TABLE_EVENTS + ConfigMemHelper_config_data.attributes.TrackCount * 4) {
     index = index - NUM_TABLE_EVENTS;
-    uint8_t track = index / 4;
+    // Consumer events are registered for usable tracks 1 through TrackCount (track 0
+    // is the homing position and has no command events).  The registration loop uses
+    // a zero-based slot offset (slot = track - 1), so slot 0 → track 1, slot N-1 →
+    // track N.  Add 1 here to recover the correct 1-based track number.
+    uint8_t track = index / 4 + 1;
     uint8_t outputState = index % 4;
     switch (outputState) {
       case 0:
@@ -177,31 +181,57 @@ void TurntableCallback(uint16_t callin) {
         }
       }
   }
-  else {    
-// skip Door events as they are produced, not consumed
+  else {
+    // Adjust index relative to the first non-track consumer event
     index = index - (NUM_TABLE_EVENTS + ConfigMemHelper_config_data.attributes.TrackCount * 4);
-    if (index < NUM_LUM_EVENTS){
-        switch (index) { //, , , , 
-          case 0:  //   CEID(eidBridge)
-          touchCommand(2);
-          break;
-          case 1:  //  PEID(eidInterior)
-          // produced
-          break;
-          case 2:  //  PEID(eidExterior)
-          // produced
-          break;
-          case 3:  //  CEID(eidHighLuminosity_On)
-          DimmerHigh();      // go to high luminosity
-          break;
-          case 4:  //  CEID(eidLowLuminosity_On)
-          DimmerLow();       // go to low luminosity 
-          break;
+
+    // The next 3 consumer events are luminosity / bridge controls (consumed locally)
+    if (index < 3) {
+        switch (index) {
+          case 0:  // CEID(eidBridge) – toggle bridge lights
+            touchCommand(2);
+            break;
+          case 1:  // CEID(eidHighLuminosity_On)
+            DimmerHigh();
+            break;
+          case 2:  // CEID(eidLowLuminosity_On)
+            DimmerLow();
+            break;
           default:
-            // do nothing
-          break;
+            break;
+        }
+    } else {
+      // Door state sync: the Roundhouse broadcasts a "Producer Identified" for each
+      // door during LCC login, carrying the NVM-restored open/closed state.
+      // Mirror the received state into producer_status[] so drawDoorButton() and
+      // drawTrack() reflect the correct colour without any user interaction.
+      //
+      // Note: _config_dirty is NOT set here.  The Turntable does not independently
+      // persist door display state to its own NVM.  The Roundhouse is the single
+      // authoritative source; the Turntable always re-syncs from the Roundhouse's
+      // "Producer Identified" broadcasts at each LCC login.  If the Turntable
+      // power-cycles while the Roundhouse is still offline, door indicators will
+      // show yellow (UNKNOWN) until the Roundhouse comes back and completes login.
+      int doorIdx = (int)index - 3;  // 0-based door number
+      if (doorIdx >= 0 && doorIdx < ConfigMemHelper_config_data.attributes.DoorCount) {
+        // Mirror Roundhouse producer state into the Turntable's producer_status[] slot
+        ConfigMemHelper_config_data.producer_status[2 + doorIdx] =
+            ConfigMemHelper_config_data.consumer_status[callin];
+        // Redraw every track whose door indicator belongs to this servo
+        for (int t = 1; t <= ConfigMemHelper_config_data.attributes.TrackCount; t++) {
+          if (ConfigMemHelper_config_data.Tracks[t].doorPresent &&
+              ConfigMemHelper_config_data.Tracks[t].servoNumber == doorIdx) {
+            if (activeScreen == 1 && fullTurnSteps != 0) {
+              // Home page: radial track line
+              drawTrack(t, ((ConfigMemHelper_config_data.Tracks[t].trackFront * 360) / fullTurnSteps));
+            } else if (activeScreen == 2) {
+              // Button page: coloured door button
+              drawDoorButton(t);
+            }
+          }
         }
       }
+    }
   }
 }
 
@@ -515,9 +545,10 @@ void drawDiagnosticPage()
   int row = VRES - (vSpace * 1);
   // Clear the screen
   tft.fillScreen(TFT_BLACK);
-  // drawButton(12,butLen,col,row,TFT_GREEN,"Settings");  // go to settings page
+  drawButton(12,butLen,col,row,TFT_GREEN,"Reset Defaults");  // go to settings page
+  col = col + hSpace;
   drawButton(3,butLen,col,row,TFT_GREEN,"Configure");  // run configuration routine
-  col = col + hSpace*3;
+  col = col + hSpace*2;
   drawButton(14,butLen,col,row,TFT_GREEN,"TurnTable");  // go to home page
   col = col + hSpace;
   drawButton(18,butLen,col,row,TFT_GREEN,"Buttons"); // go to config page
@@ -1137,4 +1168,10 @@ uint8_t luminance;
   // strip.SetLuminance(luminance); // requires different neopixel library
   // strip.Show();        
   Serial.println("All Dim ...");
+}
+void ScreenPrint(String text, int col, int row, int size)
+{
+  tft.setTextDatum(TL_DATUM); // Top Left is datum
+  tft.setCursor(col, row, size);
+  tft.print(text);
 }

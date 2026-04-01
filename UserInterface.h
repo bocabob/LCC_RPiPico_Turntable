@@ -69,5 +69,6 @@ void TurnOffPixels();
 void TogglePixels();
 void DimmerHigh();
 void DimmerLow();
+void ScreenPrint(String text, int col, int row, int size);
 
 #endif

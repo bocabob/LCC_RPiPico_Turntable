@@ -15,11 +15,11 @@ Required libraries (install via Arduino Library Manager):
 - `TFT_eSPI`, `I2C_eeprom`, `NeoPixelBus`, `Wire`
 
 There are no automated tests. Manual testing uses serial console commands in `loop()`:
-- `'c'` clear NVM, `'i'` reset to CDI defaults, `'r'` factory reset, `'p'` toggle message logging, `'m'` toggle config memory logging, `'x'` load app defaults
+- `'c'` clear NVM, `'i'` reset to CDI defaults, `'r'` factory reset, `'p'` toggle message logging, `'m'` toggle config memory logging, `'x'` load app defaults, `'z'` re-apply config values from NVM
 
 ## Architecture
 
-This is an **OpenLCB (LCC) node** controlling a model railroad turntable via stepper motor, with a 320×480 TFT touch display, NeoPixel lighting, roundhouse door control, and CAN bus networking.
+This is an **OpenLCB (LCC) node** controlling a model railroad turntable via stepper motor, with an 800×480 TFT touch display, NeoPixel lighting, roundhouse door sync, and CAN bus networking.
 
 ### Dual-Core Structure
 

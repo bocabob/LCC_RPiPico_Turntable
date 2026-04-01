@@ -5,12 +5,12 @@
 //  Created by Dave Harris on 2024-09-14.
 //
 
-// This is the main debuggin file to be included in the main file
-// It DEBUG is defined, then it defines three functions:
+// This is the main debugging file to be included in the main file.
+// If DEBUG is defined, then it defines three functions:
 //   - dP(x)
 //   - dP2(x,y), where y can be HEX, BIN
 //   - dPV(n,x), where n is a name char*, and x
-// Else they are stobs.
+// Else they are stubs.
 //
 // DEBUG has to be defined as a Stream, eg Serial, Serial4
 

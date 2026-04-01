@@ -1,4 +1,3 @@
-#include <sys/_stdint.h>
 /**
  * Configuration Memory Helper Implementation
  * Auto-generated from OpenLCB configuration
@@ -139,130 +138,28 @@ static void _load_defaults_status(openlcb_node_t *openlcb_node, config_mem_t *co
 
 }
 static void _load_defaults_application(openlcb_node_t *openlcb_node, config_mem_t *config, uint16_t *consumer_index, uint16_t *producer_index) {
-/*
-  TrackAddress Tracks[MAX_TRACKS];
-  ReferenceStep References[NumberOfReferences];
-  LightAddress Lights[NumOfLights];
-  uint8_t CurrentTrack; // current track location
-  uint8_t BridgeOrientation; // current bridge orientation
-  uint8_t MemVersion;
-
-  
-	int address;
-	long trackFront;
-	long trackBack;
-  bool doorPresent;
-  int servoNumber;
-*/
-    // setTrackDefaults();
-    
-  for (int i = 0; i < (sizeof(config->Tracks) / sizeof(TrackAddress)); i++) {
-      config->Tracks[i].address = 500 + i;
-      config->Tracks[i].trackFront = 0;
-      config->Tracks[i].trackBack = (FULL_TURN_STEPS / 2);
-      config->Tracks[i].doorPresent = false;
-      config->Tracks[i].servoNumber = 0;
-    }
-  // for (int i = 0; i < config->attributes.TrackCount; i++) {
-  //   config->Tracks[i].address = 500+i; // Default address
-    // config->Tracks[i].trackFront = swap_endian32(config->attributes.tracks[i].steps); // Default address
-    // config->Tracks[i].trackBack = config->Tracks[i].trackFront + (swap_endian32(config->attributes.FullTurnSteps) / 2); // Default address
-    // config->Tracks[i].doorPresent = false; // Default address
-    // config->Tracks[i].servoNumber = i; // Default address
-  // }
-
-  // for (int i = 4; i < (sizeof(config->Tracks) / sizeof(TrackAddress)-1); i++) {
-  //     config->Tracks[i].doorPresent = true;
-  //     config->Tracks[i].servoNumber = (i-4) % MAX_DOORS;
-  //   }
-  // config->attributes.TrackCount = NUM_TRACKS;
-  
-  // homeTrack = 3;
+  // Initialise all track slots to safe defaults; actual positions are derived from
+  // CDI attributes by Set_Application_Values_From_Config() called below.
+  for (int i = 0; i < (int)(sizeof(config->Tracks) / sizeof(TrackAddress)); i++) {
+    config->Tracks[i].address = 500 + i;
+    config->Tracks[i].trackFront = 0;
+    config->Tracks[i].trackBack = (FULL_TURN_STEPS / 2);
+    config->Tracks[i].doorPresent = false;
+    config->Tracks[i].servoNumber = 0;
+  }
   Set_Application_Values_From_Config(openlcb_node, config);
-return;
-
-	// track zero is the position of the homing sensor
-	// ConfigMemHelper_config_data.Tracks[1].address = 500; // TrackStartAddress
-	ConfigMemHelper_config_data.Tracks[1].trackFront = absPosition(entryTrack1);
-	ConfigMemHelper_config_data.Tracks[1].trackBack = absPosition(entryTrack1 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[2].address = 501;
-	ConfigMemHelper_config_data.Tracks[2].trackFront = absPosition(entryTrack2);
-	ConfigMemHelper_config_data.Tracks[2].trackBack = absPosition(entryTrack2 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[3].address = 502;
-	ConfigMemHelper_config_data.Tracks[3].trackFront = absPosition(entryTrack3);
-	ConfigMemHelper_config_data.Tracks[3].trackBack = absPosition(entryTrack3 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[4].address = 503;
-	ConfigMemHelper_config_data.Tracks[4].trackFront = absPosition(houseTrack1);
-	ConfigMemHelper_config_data.Tracks[4].trackBack = absPosition(houseTrack1 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[5].address = 504;
-	ConfigMemHelper_config_data.Tracks[5].trackFront = absPosition(houseTrack2);
-	ConfigMemHelper_config_data.Tracks[5].trackBack = absPosition(houseTrack2 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[6].address = 505;
-	ConfigMemHelper_config_data.Tracks[6].trackFront = absPosition(houseTrack3);
-	ConfigMemHelper_config_data.Tracks[6].trackBack = absPosition(houseTrack3 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[7].address = 506;
-	ConfigMemHelper_config_data.Tracks[7].trackFront = absPosition(houseTrack4);
-	ConfigMemHelper_config_data.Tracks[7].trackBack = absPosition(houseTrack4 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[8].address = 507;
-	ConfigMemHelper_config_data.Tracks[8].trackFront = absPosition(houseTrack5);
-	ConfigMemHelper_config_data.Tracks[8].trackBack = absPosition(houseTrack5 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[9].address = 508;
-	ConfigMemHelper_config_data.Tracks[9].trackFront = absPosition(houseTrack6);
-	ConfigMemHelper_config_data.Tracks[9].trackBack = absPosition(houseTrack6 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[10].address = 509;
-	ConfigMemHelper_config_data.Tracks[10].trackFront = absPosition(houseTrack7);
-	ConfigMemHelper_config_data.Tracks[10].trackBack = absPosition(houseTrack7 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[11].address = 510;
-	ConfigMemHelper_config_data.Tracks[11].trackFront = absPosition(houseTrack8);
-	ConfigMemHelper_config_data.Tracks[11].trackBack = absPosition(houseTrack8 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[12].address = 511;
-	ConfigMemHelper_config_data.Tracks[12].trackFront = absPosition(houseTrack9);
-	ConfigMemHelper_config_data.Tracks[12].trackBack = absPosition(houseTrack9 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[13].address = 512;
-	ConfigMemHelper_config_data.Tracks[13].trackFront = absPosition(houseTrack10);
-	ConfigMemHelper_config_data.Tracks[13].trackBack = absPosition(houseTrack10 + (FULL_TURN_STEPS / 2));
-
-	// ConfigMemHelper_config_data.Tracks[14].address = 513;
-	ConfigMemHelper_config_data.Tracks[14].trackFront = absPosition(houseTrack11);
-	ConfigMemHelper_config_data.Tracks[14].trackBack = absPosition(houseTrack11 + (FULL_TURN_STEPS / 2));
-
 }
 
 void Set_Application_Values_From_Config(openlcb_node_t *openlcb_node, config_mem_t *config) {
-/*
-  TrackAddress Tracks[MAX_TRACKS];
-  ReferenceStep References[NumberOfReferences];
-  LightAddress Lights[NumOfLights];
-  uint8_t CurrentTrack; // current track location
-  uint8_t BridgeOrientation; // current bridge orientation
-  uint8_t MemVersion;
-
-  
-	int address;
-	long trackFront;
-	long trackBack;
-  bool doorPresent;
-  int servoNumber;
-*/
-    // setTrackDefaults();
-    
-  for (int i = 0; i < config->attributes.TrackCount; i++) {
-    config->Tracks[i].trackFront = swap_endian32(config->attributes.tracks[i].steps); // Default address
-    config->Tracks[i].trackBack = config->Tracks[i].trackFront + (swap_endian32(config->attributes.FullTurnSteps) / 2); // Default address
-    config->Tracks[i].doorPresent = false; // Default address
-    config->Tracks[i].servoNumber = 0; // Default address
+  // Track 0 is the homing-sensor position (step 0) — its position is established at
+  // run-time by the homing routine, not from the CDI.  Tracks 1 through TrackCount
+  // are the user-configured usable tracks; TrackCount is the number of usable tracks
+  // as entered in the CDI (track 0 is not counted).
+  for (int i = 1; i <= config->attributes.TrackCount; i++) {
+    config->Tracks[i].trackFront = swap_endian32(config->attributes.tracks[i].steps);
+    config->Tracks[i].trackBack = config->Tracks[i].trackFront + (swap_endian32(config->attributes.FullTurnSteps) / 2);
+    config->Tracks[i].doorPresent = false;
+    config->Tracks[i].servoNumber = 0;
   }
 
   for (int d = 0; d < config->attributes.DoorCount; d++) { 
@@ -553,29 +450,19 @@ bool ConfigMemHelper_is_config_mem_reset(void) {
 }
 
 long getSteps() {
-  char data[4];
-  long eepromSteps;
+  long eepromSteps = (swap_endian64(ConfigMemHelper_config_data.attributes.FullTurnSteps));
   stepsSet = true;
-  
-  if (stepsSet) {
-    eepromSteps = (swap_endian64(ConfigMemHelper_config_data.attributes.FullTurnSteps));
-    if (eepromSteps <= sanitySteps) {
+
+  if (eepromSteps <= sanitySteps) {
 #ifdef TT_DEBUG
-      Serial.print(F("DEBUG: TTLN steps read from EEPROM: "));
-      Serial.println(eepromSteps);
+    Serial.print(F("DEBUG: TTLN steps read from EEPROM: "));
+    Serial.println(eepromSteps);
 #endif
-      return eepromSteps;
-    } else {
-#ifdef TT_DEBUG
-      Serial.print(F("DEBUG: TTLN steps in EEPROM are invalid: "));
-      Serial.println(eepromSteps);
-#endif
-      calibrating = true;
-      return 0;
-    }
+    return eepromSteps;
   } else {
 #ifdef TT_DEBUG
-    Serial.println(F("DEBUG: TTLN steps not defined in EEPROM"));
+    Serial.print(F("DEBUG: TTLN steps in EEPROM are invalid: "));
+    Serial.println(eepromSteps);
 #endif
     calibrating = true;
     return 0;
@@ -593,7 +480,6 @@ void writeSteps(long steps) {
 // write the current track number and orientation
 void writeTrack(uint8_t i,uint8_t Direction){
       if (i > NUM_TRACKS) return;
-      // ee.writeBlock(9,(uint8_t *) &i, sizeof(i));  // mesh with other EEPROM uses - need to fix
       ConfigMemHelper_config_data.CurrentTrack = i;
       ConfigMemHelper_config_data.BridgeOrientation = Direction;
   }
@@ -630,13 +516,6 @@ void getCount(){
 }
 void writeTracks()
 {
-  /* 
-  int address;
-	long trackFront;
-	long trackBack;
-  bool doorPresent;
-  int servoNumber;
-  */
   rp2040.idleOtherCore();
 
   ConfigMemHelper_config_data.attributes.TrackCount = trackCount;
@@ -645,22 +524,11 @@ void writeTracks()
       Serial.println(trackCount);
   #endif
 
-  // for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
-  // ConfigMemHelper_config_data.Tracks[i] = Tracks[i];
-  // }
-  
   rp2040.resumeOtherCore();
 }
 
 void getTracks()
 {
-  /* 
-  int address;
-	long trackFront;
-	long trackBack;
-  bool doorPresent;
-  int servoNumber;
-  */
   rp2040.idleOtherCore();
 
   trackCount = ConfigMemHelper_config_data.attributes.TrackCount;
@@ -669,9 +537,6 @@ void getTracks()
       Serial.println(trackCount);
   #endif
 
-  // for (int i = 0; i < (sizeof(Tracks) / sizeof(TrackAddress)); i++) {
-  // Tracks[i] = ConfigMemHelper_config_data.Tracks[i];
-  // }
   rp2040.resumeOtherCore();
 }
 

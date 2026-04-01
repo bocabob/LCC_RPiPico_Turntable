@@ -1,9 +1,9 @@
 /*
  *  This is the configuration file for the Raspberry Pi Pico node hardware.
-    defines and constants
+ *  Defines and constants.
  */
 
-// Configureation settings
+// Configuration settings
 
 #ifndef DEFINES_H
 #define DEFINES_H
@@ -13,7 +13,7 @@
 #define ARDUINO_COMPATIBLE
 
 // --------------------------------------------
-// Select ONE of these for Non-volitile Memory Storage
+// Select ONE of these for Non-volatile Memory Storage
 // --------------------------------------------
 // #define USE_INTERNAL_FLASH_STORAGE
 #define USE_I2C_STORAGE
@@ -164,7 +164,7 @@ const uint8_t PixelPin = NeoPixel_PinA;  // pin for the data line, ignored for E
 #define Light_B 0
 
 #define MAX_TRACKS 20
-#define NUM_TRACKS 15 // Define number of turntable tracks for default / max, includes non-track zero position for home sensor
+#define NUM_TRACKS 14 // Define number of turntable tracks for default / max, not including the non-track zero position for home sensor
 #define MAX_DOORS 16
 #define NUM_DOORS 10
 
@@ -206,92 +206,52 @@ const uint8_t accPin = 25;                           // Pin for accessory output
 #define DEBOUNCE_TOUCH 40
 #define DEBOUNCE_BOX 80
 
-/* The TFT interface is defined in the User_Setup.h file in the TFT_eSPI Arduino library folder. These are my settings:
-////////////////////////////////////////////////////////////////////////////////////////////
-// RP2040 pins used
-////////////////////////////////////////////////////////////////////////////////////////////
-
-//#define TFT_CS   -1  // Do not define, chip select control pin permanently connected to 0V
-
-// These pins can be moved and are controlled directly by the library software
-#define TFT_DC   28    // Data Command control pin
-#define TFT_RST   2    // Reset pin
-
-//#define TFT_RD   -1  // Do not define, read pin permanently connected to 3V3
-
-// Note: All the following pins are PIO hardware configured and driven
-  #define TFT_WR   22
-
-  // PIO requires these to be sequentially increasing - do not change
-  #define TFT_D0    6
-  #define TFT_D1    7
-  #define TFT_D2    8
-  #define TFT_D3    9
-  #define TFT_D4   10
-  #define TFT_D5   11
-  #define TFT_D6   12
-  #define TFT_D7   13
-
-//#define TOUCH_CS -1     // Chip select pin (T_CS) of touch screen
-
-#define LOAD_GLCD   // Font 1. Original Adafruit 8 pixel font needs ~1820 bytes in FLASH
-#define LOAD_FONT2  // Font 2. Small 16 pixel high font, needs ~3534 bytes in FLASH, 96 characters
-#define LOAD_FONT4  // Font 4. Medium 26 pixel high font, needs ~5848 bytes in FLASH, 96 characters
-#define LOAD_FONT6  // Font 6. Large 48 pixel font, needs ~2666 bytes in FLASH, only characters 1234567890:-.apm
-#define LOAD_FONT7  // Font 7. 7 segment 48 pixel font, needs ~2438 bytes in FLASH, only characters 1234567890:-.
-#define LOAD_FONT8  // Font 8. Large 75 pixel font needs ~3256 bytes in FLASH, only characters 1234567890:-.
-#define LOAD_GFXFF  // FreeFonts. Include access to the 48 Adafruit_GFX free fonts FF1 to FF48 and custom fonts
-#define SMOOTH_FONT
-
-/***************************************************************************************
-**                         Section 5: Font datum enumeration
-**************************************************************************************
-//These enumerate the text plotting alignment (reference datum point)
-#define TL_DATUM 0 // Top left (default)
-#define TC_DATUM 1 // Top centre
-#define TR_DATUM 2 // Top right
-#define ML_DATUM 3 // Middle left
-#define CL_DATUM 3 // Centre left, same as above
-#define MC_DATUM 4 // Middle centre
-#define CC_DATUM 4 // Centre centre, same as above
-#define MR_DATUM 5 // Middle right
-#define CR_DATUM 5 // Centre right, same as above
-#define BL_DATUM 6 // Bottom left
-#define BC_DATUM 7 // Bottom centre
-#define BR_DATUM 8 // Bottom right
-#define L_BASELINE  9 // Left character baseline (Line the 'A' character would sit on)
-#define C_BASELINE 10 // Centre character baseline
-#define R_BASELINE 11 // Right character baseline
-
-/***************************************************************************************
-**                         Section 6: Colour enumeration
-**************************************************************************************
-// Default color definitions
-#define TFT_BLACK       0x0000      /*   0,   0,   0 
-#define TFT_NAVY        0x000F      /*   0,   0, 128 
-#define TFT_DARKGREEN   0x03E0      /*   0, 128,   0 
-#define TFT_DARKCYAN    0x03EF      /*   0, 128, 128 
-#define TFT_MAROON      0x7800      /* 128,   0,   0 
-#define TFT_PURPLE      0x780F      /* 128,   0, 128 
-#define TFT_OLIVE       0x7BE0      /* 128, 128,   0 
-#define TFT_LIGHTGREY   0xD69A      /* 211, 211, 211 
-#define TFT_DARKGREY    0x7BEF      /* 128, 128, 128 
-#define TFT_BLUE        0x001F      /*   0,   0, 255 
-#define TFT_GREEN       0x07E0      /*   0, 255,   0 
-#define TFT_CYAN        0x07FF      /*   0, 255, 255 
-#define TFT_RED         0xF800      /* 255,   0,   0 
-#define TFT_MAGENTA     0xF81F      /* 255,   0, 255 
-#define TFT_YELLOW      0xFFE0      /* 255, 255,   0 
-#define TFT_WHITE       0xFFFF      /* 255, 255, 255 
-#define TFT_ORANGE      0xFDA0      /* 255, 180,   0 
-#define TFT_GREENYELLOW 0xB7E0      /* 180, 255,   0 
-#define TFT_PINK        0xFE19      /* 255, 192, 203  //Lighter pink, was 0xFC9F
-#define TFT_BROWN       0x9A60      /* 150,  75,   0 
-#define TFT_GOLD        0xFEA0      /* 255, 215,   0 
-#define TFT_SILVER      0xC618      /* 192, 192, 192 
-#define TFT_SKYBLUE     0x867D      /* 135, 206, 235 
-#define TFT_VIOLET      0x915C      /* 180,  46, 226 
-*/
+// The TFT interface is defined in User_Setup.h inside the TFT_eSPI Arduino library folder.
+// Reference settings used for this board (RP2040, 800x480 parallel 8-bit display):
+//
+// RP2040 pins
+// -----------
+// //#define TFT_CS   -1   // chip select permanently tied to GND
+// #define TFT_DC   28    // Data/Command control
+// #define TFT_RST   2    // Reset
+// //#define TFT_RD   -1   // read pin permanently tied to 3V3
+// #define TFT_WR   22    // Write strobe (PIO-driven)
+//
+// PIO data bus — pins must be sequentially increasing:
+// #define TFT_D0    6
+// #define TFT_D1    7
+// #define TFT_D2    8
+// #define TFT_D3    9
+// #define TFT_D4   10
+// #define TFT_D5   11
+// #define TFT_D6   12
+// #define TFT_D7   13
+//
+// //#define TOUCH_CS -1   // touch chip select not used
+//
+// Fonts enabled:
+// #define LOAD_GLCD    // Font 1 — original Adafruit 8px font  (~1820 bytes)
+// #define LOAD_FONT2   // Font 2 — small 16px font              (~3534 bytes)
+// #define LOAD_FONT4   // Font 4 — medium 26px font             (~5848 bytes)
+// #define LOAD_FONT6   // Font 6 — large 48px font              (~2666 bytes)
+// #define LOAD_FONT7   // Font 7 — 7-segment 48px font          (~2438 bytes)
+// #define LOAD_FONT8   // Font 8 — large 75px font              (~3256 bytes)
+// #define LOAD_GFXFF   // FreeFonts — 48 Adafruit_GFX fonts FF1-FF48
+// #define SMOOTH_FONT
+//
+// Text datum constants (defined by TFT_eSPI, listed here for reference):
+// TL_DATUM 0  TC_DATUM 1  TR_DATUM 2
+// ML_DATUM 3  MC_DATUM 4  MR_DATUM 5
+// BL_DATUM 6  BC_DATUM 7  BR_DATUM 8
+// L_BASELINE 9  C_BASELINE 10  R_BASELINE 11
+//
+// Standard colour constants (RGB565, defined by TFT_eSPI, listed here for reference):
+// TFT_BLACK 0x0000  TFT_NAVY 0x000F  TFT_DARKGREEN 0x03E0  TFT_DARKCYAN 0x03EF
+// TFT_MAROON 0x7800  TFT_PURPLE 0x780F  TFT_OLIVE 0x7BE0  TFT_LIGHTGREY 0xD69A
+// TFT_DARKGREY 0x7BEF  TFT_BLUE 0x001F  TFT_GREEN 0x07E0  TFT_CYAN 0x07FF
+// TFT_RED 0xF800  TFT_MAGENTA 0xF81F  TFT_YELLOW 0xFFE0  TFT_WHITE 0xFFFF
+// TFT_ORANGE 0xFDA0  TFT_GREENYELLOW 0xB7E0  TFT_PINK 0xFE19  TFT_BROWN 0x9A60
+// TFT_GOLD 0xFEA0  TFT_SILVER 0xC618  TFT_SKYBLUE 0x867D  TFT_VIOLET 0x915C
 #define RailColor       0x9A60      /* 150,  75,   0  brown */
 
 #define RedLevel 50   // bridge center

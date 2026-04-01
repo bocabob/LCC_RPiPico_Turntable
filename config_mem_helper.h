@@ -13,11 +13,6 @@
 // ===== Configuration Memory Structure =====
 // Auto-generated from CDI XML via C Struct Generation Panel
 
-// Auto-generated from CDI XML
-// OpenLCB Configuration Memory Structure
-
-#include <stdint.h>
-
 #include "BoardSettings.h"
 #include "TTvariables.h"
 
@@ -86,7 +81,7 @@ typedef struct{
   
 // modify as desired
 // data not used by CDI 
-  event_status_enum consumer_status[5+4*MAX_TRACKS+3]; // Array to hold the state of each event (on/off/unknown) for the 42 events defined in the configuration
+  event_status_enum consumer_status[5+4*MAX_TRACKS+3+MAX_DOORS]; // Array to hold the state of each event (on/off/unknown); +MAX_DOORS for door state sync events
   event_status_enum producer_status[2+MAX_DOORS+2]; // Array to hold the state of each event (on/off/unknown) for the events defined in the configuration
   TrackAddress Tracks[MAX_TRACKS];
   ReferenceStep References[NumberOfReferences];
@@ -109,11 +104,11 @@ extern config_mem_t ConfigMemHelper_config_data;
 
 // ===== Configuration Memory Access Functions =====
 
-// Reads the current NVM into the passed structure, the two are in synce when it returns.
+// Reads the current NVM into the passed structure; the two are in sync when it returns.
 extern bool ConfigMemHelper_read(openlcb_node_t *openlcb_node, config_mem_t *config);
-// Writes the current passed structure in the NVM, the two are in synce when it returns.
+// Writes the current passed structure to the NVM; the two are in sync when it returns.
 extern bool ConfigMemHelper_write(openlcb_node_t *openlcb_node, config_mem_t *config);
-// Loads the default values for the NMV into the structure and writes them to the NVM, the two are in synce when it returns.
+// Loads the default values for the NVM into the structure and writes them to the NVM; the two are in sync when it returns.
 extern bool ConfigMemHelper_reset_and_write_default(openlcb_node_t *openlcb_node);
 
 // Sets all Configuration Memory to the default 0xFF that a newly programmed device would have
@@ -128,7 +123,7 @@ extern bool ConfigMemHelper_nvm_is_accessible(void);
 
 // Hooks for the OpenLcbLib that allows snooping on Config Mem writes before passing them on to the Pico Drivers to write to NVM
 extern uint16_t ConfigMemHelper_config_mem_write(openlcb_node_t *openlcb_node, uint32_t address, uint16_t count, configuration_memory_buffer_t *buffer);
-// Hooks for the OpenLcbLib that allows snooping on Config Mem reads before passing them on to the Pico Drivers to read/ite to NVM
+// Hooks for the OpenLcbLib that allows snooping on Config Mem reads before passing them on to the Pico Drivers to read from NVM
 extern uint16_t ConfigMemHelper_config_mem_read(openlcb_node_t *openlcb_node, uint32_t address, uint16_t count, configuration_memory_buffer_t *buffer);
 
 extern bool ConfigMemHelper_toggle_log_access(void);

@@ -26,49 +26,38 @@
  *
  * \file LCC_RPiPico_Turntable.ino
  *
- * This sketh will create a very basic OpenLcb Node.  It needs the Config Memory handlers and a reset impementation finished (esp32_drivers.c)
- * Connect the CAN transciever Tx pin to GPIO 21 adn the Rx pin to GPIO 22 on the ESP32 Dev Board.
+ * This sketch creates an OpenLcb Turntable controller node running on a
+ * Raspberry Pi Pico 2 with an MCP2518 hardware CAN controller.
  *
  * @author Bob Gamble, David Harris, Alex Shepherd, and Jim Kueneman
  * @date 23 Feb 2025
  */
-/* LCC Stepper Motor Controller ( A4988 ) Example
- Author: Alex Shepherd 2017-12-04, modified by Bob Gamble for LocoNet 2022-1-21, with code from Peter Cole's EX-Turntable project Oct 2023 
- Rewritten by Bob Gamble for LCC 2025-1-10
- The original example required two Arduino Libraries:
- 1) The AccelStepper library from: http://www.airspayce.com/mikem/arduino/AccelStepper/index.html
- 2) The OpenLCB single thread library is used for LCC
-the stepper library is included as modifications have been made
-
- This current program uses a Raspberry Pi Pico:
-1) the OpenLCB single thread, Wire, AccelStepper, TFT, Touch, and I2C_eeprom libraries;
-2) 
-3) A4988 stepper motor driver module or similar
-4) Hall sensor(s) for indexing
-5) parallel Touch TFT for control and status
-6) NeoPixel for lights
-7) 
-8) I2C EEPROM for saving states
-
-Pin usage specified in the configuration file:
-  The LCC Shield uses pins for the HW CAN controller MCP2518
-  The A4988 module interface uses three pins
-  The Hall sensors uses a pin each for sensing
-  The I2C uses pins
-  The NeoPixel uses a pin 
-
-Other pins for relays and LEDs may be used.
-//==============================================================
-// Pico LCC Node with 2518 HW controller
-// Modified DPH 2024 RSG 2025
-// Copyright 2019 Alex Shepherd and David Harris and Bob Gamble, 2025
-//==============================================================
-*/
+/*
+ * LCC Stepper Motor Turntable Controller
+ *
+ * Original stepper work: Alex Shepherd 2017-12-04
+ * Modified for LocoNet: Bob Gamble 2022-01-21
+ * EX-Turntable code: Peter Cole Oct 2023
+ * Rewritten for LCC (OpenLCB): Bob Gamble 2025-01-10
+ * Modified: DPH 2024, RSG 2025
+ * Copyright 2019 Alex Shepherd, David Harris, and Bob Gamble
+ *
+ * This program uses a Raspberry Pi Pico 2 with:
+ *   - MCP2518 hardware CAN controller (LCC Shield)
+ *   - A4988 stepper motor driver module (Step/Dir/Enable)
+ *   - Hall sensor(s) for home and bridge indexing
+ *   - 800x480 parallel Touch TFT for control and status display
+ *   - NeoPixel for bridge/accessory lighting
+ *   - I2C EEPROM (24LC512) for persistent configuration
+ *
+ * The local AccelStepper copy in src/application_drivers/ contains
+ * modifications — do not replace with the stock Arduino library version.
+ *
+ * Pin assignments are in BoardSettings.h.
+ */
 #include "Arduino.h"
 #include <Wire.h>
 #include <LibPrintf.h>
-
-// #define USER_DEFINED_CONSUMER_COUNT 60
 
 #include "BoardSettings.h"
 
@@ -92,14 +81,11 @@ Other pins for relays and LEDs may be used.
 #include "src/application_drivers/AccelStepper.h"
 #include "UserInterface.h"
 
-// #define NODE_ID 0x050101010777
 #define NODE_ID 0x050101019411      // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
-// #define NODE_ADDRESS  5,1,1,1,94,0x08   // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
 
 
 ////// DECLARATIONS
 
-// extern AccelStepper stepper;
 extern bool lastRunningState;   // Stores last running state to allow turning the stepper off after moves.
 
 extern AccelStepper stepper;
@@ -109,14 +95,11 @@ extern void runStepper();
 extern void disableStepper();
 
 bool setupComplete = false;
-bool setup1Complete = false;
 bool StorageReady = false;
 
 bool stepsSet;
 
 npStrings _Strings[MAX_STRINGS];
-// MemStruct CDI_RAM;
-// extern bool GroupState[MAX_GROUPS];   // defined in NPlights.cpp
 
 static const can_config_t can_config = {
     .transmit_raw_can_frame  = &RPiPicoCanDriver_transmit_raw_can_frame,
@@ -137,7 +120,7 @@ static const openlcb_config_t openlcb_config = {
     .factory_reset                   = &Callbacks_operations_request_factory_reset,
     .freeze                          = &Callbacks_freeze,
     .unfreeze                        = &Callbacks_unfreeze,
-    .firmware_write                  = &Callbacks_write_firemware,
+    .firmware_write                  = &Callbacks_write_firmware,
     .on_100ms_timer                  = &Callbacks_on_100ms_timer_callback,
     .on_login_complete               = &Callbacks_on_login_complete,
     .on_consumed_event_identified    = &Callbacks_on_consumed_event_identified,
@@ -151,7 +134,7 @@ void _check_for_nvm_initialization(void) {
 
   if (!ConfigMemHelper_nvm_is_accessible()) {
     Serial.println("FATAL: NVM not accessible - check I2C wiring, address (0x50), and pullups on SDA/SCL");
-    while (true) { delay(1000); }  // halt
+    // while (true) { delay(1000); }  // halt
   }
 
   // If the first byte of the configuration memory is 0xFF then the space has never been accessed (fresh firmware load) and need to be initialized to 0x00
@@ -165,13 +148,13 @@ void _check_for_nvm_initialization(void) {
 
   } else {
 
-    Serial.println("Configuration Memory has been previously initalized");
+    Serial.println("Configuration Memory has been previously initialized");
 
   }
 }
 
 void _register_producers(void) {
-int index = 0;
+  int index = 0;
   OpenLcbApplication_clear_producer_eventids(OpenLcbUserConfig_node_id);
 
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.OpenAll), ConfigMemHelper_config_data.producer_status[index]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
@@ -185,10 +168,7 @@ int index = 0;
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidInterior), ConfigMemHelper_config_data.producer_status[index]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior), ConfigMemHelper_config_data.producer_status[index+1]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID 
 }
-  /*
-bool OpenLcbApplication_send_event_pc_report(openlcb_node_t *openlcb_node, event_id_t event_id);
-bool OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior);
-*/
+
 bool produceLightIn()
 {
   if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidInterior))) {
@@ -210,9 +190,9 @@ bool produceLightEx()
 bool produceOpenAll()
 {
   if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.OpenAll))) {
-  // open all doors
+  // open all doors — SET means open (matches Roundhouse SetServoStatus() convention)
   for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
-  ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_CLEAR;  // clear all the individual door events in the NVM so that when the producer event ID is sent it will be correct for the new state of the doors (on)
+  ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_SET;
   }
   return true;
   }
@@ -221,9 +201,9 @@ bool produceOpenAll()
 bool produceCloseAll()
 {
   if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.CloseAll))) {
-  // close all doors
+  // close all doors — CLEAR means closed (matches Roundhouse SetServoStatus() convention)
   for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
-  ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_SET;  // set all the individual door events in the NVM so that when the producer event ID is sent it will be correct for the new state of the doors (on)
+  ConfigMemHelper_config_data.producer_status[2+i] = EVENT_STATUS_CLEAR;
   }
   return true;
   }
@@ -233,9 +213,13 @@ bool produceCloseAll()
 bool produceDoor(int servo)
 {
   if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[servo].eidToggle))) {
-  // Toggle the state of the door event in the NVM so that when the producer event ID is sent it will be correct for the new state of the door (on/off)
+  // Optimistically toggle the local producer_status before the Roundhouse confirms
+  // the move.  If the CAN message is lost or the servo fails, the Turntable display
+  // will diverge from the actual door state.  The Roundhouse's "Producer Identified"
+  // broadcasts at the next LCC login are the recovery mechanism that re-syncs the
+  // display to ground truth.
   ToggleProducerEventStatus(2 + servo);
-    
+
   return true;
   }
   return false;
@@ -257,10 +241,14 @@ void ToggleProducerEventStatus(int eventIndex)
       ConfigMemHelper_config_data.producer_status[eventIndex] = EVENT_STATUS_SET;  // set if it is currently clear so that the next time the event is produced it will be set
       break;
   }
+  // Mark the RAM config as dirty so the 100ms timer will flush to EEPROM within
+  // ~3 seconds.  Writing directly here blocks Core 0 for 200-500ms per call,
+  // which stalls CAN bus processing and can corrupt the I2C bus under load.
+  _config_dirty = true;
 }
 
 void _register_consumers(void) {
-int index = 0;
+  int index = 0;
   OpenLcbApplication_clear_consumer_eventids(OpenLcbUserConfig_node_id);
 
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.Rehome), ConfigMemHelper_config_data.consumer_status[index]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the consumer event ID
@@ -275,11 +263,17 @@ int index = 0;
   index++;
 
 
-  for (int i = 0; i < ConfigMemHelper_config_data.attributes.TrackCount; i++) {
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Front), ConfigMemHelper_config_data.consumer_status[index+i*4]); // need to read the state from the NVM to know if it is on/off/unknown when registering the consumer event ID
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Back), ConfigMemHelper_config_data.consumer_status[index+1+i*4]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Occupancy), ConfigMemHelper_config_data.consumer_status[index+2+i*4]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].RailCom), ConfigMemHelper_config_data.consumer_status[index+3+i*4]);
+  // Register consumer events for usable tracks 1 through TrackCount.
+  // Track 0 is the homing-sensor position; it has no LCC command events — homing
+  // is handled by the dedicated Rehome consumer registered above.
+  // The loop offset (i-1) maps track i into the zero-based consumer_status slot so
+  // the contiguous consumer_status[] block is fully packed with no gap at slot 0.
+  for (int i = 1; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
+    int slot = i - 1;  // zero-based slot within the track block of consumer_status[]
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Front),    ConfigMemHelper_config_data.consumer_status[index + slot*4]);
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Back),     ConfigMemHelper_config_data.consumer_status[index + slot*4 + 1]);
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Occupancy), ConfigMemHelper_config_data.consumer_status[index + slot*4 + 2]);
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].RailCom),   ConfigMemHelper_config_data.consumer_status[index + slot*4 + 3]);
   }
   index += ConfigMemHelper_config_data.attributes.TrackCount*4;
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidBridge), ConfigMemHelper_config_data.consumer_status[index]);
@@ -287,6 +281,19 @@ int index = 0;
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidHighLuminosity_On), ConfigMemHelper_config_data.consumer_status[index]);
   index++;
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidLowLuminosity_On), ConfigMemHelper_config_data.consumer_status[index]);
+  index++;
+
+  // Register the Roundhouse door ToggleDoor event IDs as consumers on the Turntable.
+  // This allows the Turntable to receive "Consumer Identified" messages from the Roundhouse
+  // during LCB login, carrying the NVM-restored open/closed state for each door, so the
+  // Turntable display is synchronised at startup without any user interaction.
+  for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
+    OpenLcbApplication_register_consumer_eventid(
+        OpenLcbUserConfig_node_id,
+        swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidToggle),
+        ConfigMemHelper_config_data.consumer_status[index++]);
+  }
+
   // uncomment the following if you want to register consumer event IDs for the producer events as well, but it is not needed unless you want to be able to consume your own producer events (e.g. for testing or if you have a use case for it in your application)
   /*
   index = 0;
@@ -340,12 +347,6 @@ void setup() {
   Serial.println("Data variable loaded and ready for use");
   // TODO: need to load track variables and door variables into the local data structures as well for use in the program, or read from the NVM when needed.  The latter is simpler but less efficient.  The former is more efficient but more complex to implement and maintain.  For now, we will read from the NVM when needed.
   
-  // Load_application_defaults(OpenLcbUserConfig_node_id);
-
-  // initStringFlags();
-  // SetupPixels();
-  // InitialzePixels();  // TODO: JDK THIS CAUSED A HANG ON MY BOARD.... 
-
   // Now use the data found in the data structures to register the current event IDs
   // need to read states from NVM to know the state when registering the consumer event IDs
   _register_consumers();
@@ -371,8 +372,6 @@ void setup1() {
   setupDisplay(); 
   initializeHardware(); 
 
-// // old code *****************************************
-
   // set defaults
   fullTurnSteps = FULL_TURN_STEPS;
   halfTurnSteps = fullTurnSteps / 2;
@@ -381,7 +380,6 @@ void setup1() {
   Serial.println(F(" default steps per revolution"));  
 
   // check EEPROM for saved values and initialize
-  // long savedSteps = readEEPROM();
   long savedSteps = getSteps();
   if (savedSteps > 0)
     {
@@ -400,26 +398,9 @@ void setup1() {
   if (fullTurnSteps == 0)
   {
     fullTurnSteps = FULL_TURN_STEPS;
-    // setTrackDefaults();
-    // setServoDefaults();
   }
   halfTurnSteps = fullTurnSteps / 2;  
 
-  // if (!calibrating ) {
-  //   calibrating = true;
-  //   calibrationPhase = 3;
-  //   stepper.enableOutputs();
-  //   stepper.moveTo(fullTurnSteps);
-  //   lastTarget = fullTurnSteps;
-  //   Serial.print(calibrating);
-  //   Serial.print(F(" calibrating   "));
-  //   Serial.print(fullTurnSteps);
-  //   Serial.println(F(" steps per revolution"));
-  // }
-
-// #ifndef SENSOR_TESTING  // If we're not sensor testing, start Wire()
-  // setupWire();
-// #endif
   Set_Application_Values_From_Config(OpenLcbUserConfig_node_id, &ConfigMemHelper_config_data);
   displayConfig();  // Display Turntable configuration
   notice(" ");
@@ -429,15 +410,13 @@ void setup1() {
   notice("Stepper set up");
   lastRunningState = isStepperRunning();
   
-  // setupServos();
-
 	notice("Turntable Program Started");
 	
   setupComplete = true;
   Serial.println(F("Setup zero complete"));
-  while(!setup1Complete);
-  delay(10);
-
+  // Note: setup1Complete was removed — it was declared false and never set true,
+  // making while(!setup1Complete) an infinite loop that prevented Core 1 from
+  // ever reaching startChecking() or loop1().
   startChecking();
   if (!stepsSet) {
     //  drawSettingsPage();
@@ -449,15 +428,6 @@ void setup1() {
     drawTracks();
     homed = 0;
     initiateHoming();
-    // below was commented out
-    // calibrating = true;
-    // calibrationPhase = 1;
-    // moveHome();
-
-    // Serial.println(F("Setup initial homing..."));
-    // stepper.enableOutputs();
-    // stepper.moveTo(sanitySteps);
-    // lastTarget = sanitySteps;
   }  
   Serial.println("Loop 1 started \n");
 }
@@ -475,8 +445,6 @@ void loop() {
         Serial.println("'p': Toggle Message Logging");
         Serial.println("'r': Resetting NVM to 0xFF for a fresh boot");
         Serial.println("'m': Toggle Config Mem read/write Logging");
-        Serial.println("'t': Display current time");
-        Serial.println("'q': Query current time");
       break;
       case 'c':
         Serial.println("Setting NVM to 0x00...");
@@ -507,14 +475,6 @@ void loop() {
           Serial.println("Not Logging Access");
         }
       break;
-      // case 'q':
-      //   OpenLcbApplicationBroadcastTime_send_query(OpenLcbUserConfig_node_id, BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
-      // break;
-      // case 't':    
-      //   broadcast_clock_state_t* clock = OpenLcbApplicationBroadcastTime_get_clock(BROADCAST_TIME_ID_DEFAULT_FAST_CLOCK);
-      //   // clock->is_running = true;
-      //   printf("Current time: %02d:%02d\n", clock->time.hour, clock->time.minute);  
-      // break;
       case 'x':      
        Load_application_defaults(OpenLcbUserConfig_node_id);
       break;
@@ -524,28 +484,16 @@ void loop() {
     };  
   }
 
-  // // put your main code here, to run repeatedly
   RPiPicoCanDriver_process_receive();
 
   OpenLcb_run();
-  // ProcessPixels();
-  
+
   touchIO();    // process touch input
   
 }
 
 // ==== Loop Two for node function processes ==========================
 void loop1() {
-  static long nextdot = 0;
-  if(millis()>nextdot) {
-    nextdot = millis()+2000;
-    //dP("\n.");
-  }
-    
-  // ResetStrings(); // ResetDirty()
-  // ProcessPixels();
-  
-    
     if (calibrating) calibration();    // If flag is set for calibrating, do it.
     else
     { 
@@ -560,9 +508,6 @@ void loop1() {
 
     runStepper();    // Process the stepper object continuously.
 
-
-    // processLED();   // Process our LED.
-
     #if defined(DISABLE_OUTPUTS_IDLE)   // If disabling on idle is enabled, disable the stepper.
       if (isStepperRunning() != lastRunningState) {
         lastRunningState = isStepperRunning();
@@ -574,11 +519,5 @@ void loop1() {
         }
       }
     #endif
-
-  // touchIO();    // process touch input
-  
-    // processSerialInput();   // Receive and process and serial input for test commands.
-
-  // #endif 
 
 }

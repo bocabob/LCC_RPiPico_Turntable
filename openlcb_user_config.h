@@ -71,7 +71,7 @@
 // configuration memory space the user-editable name and description strings
 // begin.  The standard layout puts the user name at address 0 and the user
 // description immediately after at byte 62:
-//   63 = LEN_SNIP_USER_NAME_BUFFER (63)
+//   63 = LEN_SNIP_USER_NAME_BUFFER (63)    // defined in openlcb_config_memory.h but needs to be set to 62 for correct display in JMRI SNIP configuration dialog
 
 #define USER_DEFINED_CDI_LENGTH                      20000
 #define USER_DEFINED_FDI_LENGTH                      1000
