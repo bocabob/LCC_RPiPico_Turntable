@@ -13,15 +13,15 @@
         <group>
             <name>Node ID</name>
             <description>User-provided description of the node</description>
-            <string size="62">
+            <string size="63">
                 <name>Node Name</name>
             </string>
-            <string size="63">
+            <string size="64">
                 <name>Node Description</name>
             </string>
         </group>
     </segment>
-    <segment origin="125" space="253">
+    <segment origin="127" space="253">
         <name>Reset Control</name>
         <description>Controls Actions at Next Board Reset. Reloading User or Factory Defaults</description>
         <int size="1">
@@ -43,7 +43,7 @@
             </map>
         </int>
     </segment>
-    <segment origin="126" space="253">
+    <segment origin="128" space="253">
         <name>Parameters</name>
         <description>Setup for Turntable control.</description>
         <group>
