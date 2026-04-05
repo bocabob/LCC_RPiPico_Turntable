@@ -44,6 +44,8 @@
 #include "src/openlcb/openlcb_types.h"
 #include "src/drivers/canbus/can_types.h"
 #include "src/openlcb/openlcb_gridconnect.h"
+#include "src/openlcb/openlcb_application_dcc_detector.h"
+#include "BoardSettings.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -89,5 +91,23 @@ extern "C"
 #ifdef __cplusplus
 extern volatile bool _config_dirty;
 #endif
+
+// Per-track RailCom / DCC-detector state.  Populated by the range-hit handler
+// in callbacks.cpp whenever a DCC Detection Protocol event fires.  The display
+// layer polls _railcom_dirty as a gate, then walks the per-slot dirty flags.
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+typedef struct {
+    uint16_t dcc_address;                         // decoded DCC address (0 = empty)
+    dcc_detector_address_type_enum address_type;  // short / long / consist / empty
+    dcc_detector_direction_enum direction;         // forward / reverse / unknown / unoccupied
+    bool occupied;
+    bool dirty;                                   // true = display needs refresh for this slot
+} railcom_info_t;
+
+#ifdef __cplusplus
+extern railcom_info_t _RailCom[MAX_TRACKS];
+extern volatile bool _railcom_dirty;
+#endif
+#endif /* OPENLCB_COMPILE_DCC_DETECTOR */
 
 #endif /* __CALLBACKS__ */

@@ -30,11 +30,15 @@
 #include "mdebugging.h"
 #include "src/drivers/canbus/can_types.h"
 #include "config_mem_helper.h"
-
+#include "src/openlcb/openlcb_application_dcc_detector.h"
+#include "callbacks.h"
 
 extern openlcb_node_t *OpenLcbUserConfig_node_id;
 
 extern config_mem_t ConfigMemHelper_config_data;
+
+extern railcom_info_t _RailCom[MAX_TRACKS];
+extern volatile bool _railcom_dirty;
 
 // extern AccelStepper stepper;
 
@@ -139,14 +143,14 @@ void TurntableCallback(uint16_t callin) {
           break;
         }
   }
- else if (index < NUM_TABLE_EVENTS + ConfigMemHelper_config_data.attributes.TrackCount * 4) {
+ else if (index < NUM_TABLE_EVENTS + ConfigMemHelper_config_data.attributes.TrackCount * 3) {
     index = index - NUM_TABLE_EVENTS;
     // Consumer events are registered for usable tracks 1 through TrackCount (track 0
     // is the homing position and has no command events).  The registration loop uses
     // a zero-based slot offset (slot = track - 1), so slot 0 → track 1, slot N-1 →
     // track N.  Add 1 here to recover the correct 1-based track number.
-    uint8_t track = index / 4 + 1;
-    uint8_t outputState = index % 4;
+    uint8_t track = index / 3 + 1;
+    uint8_t outputState = index % 3;  // 0=front, 1=back, 2=occupancy, 3=railcom
     switch (outputState) {
       case 0:
       // move back side to track
@@ -158,16 +162,17 @@ void TurntableCallback(uint16_t callin) {
         break;
       case 2:
         // track occupancy toggle, just redraw track with new occupancy state
+        // TODO: set track occupancy state from new consumer_status[] slot that the CDI updates on occupancy events, rather than just toggling blindly on every occupancy event received.  This will ensure the display reflects actual track state even if an occupancy event is lost or received out of order.
         // if (fullTurnSteps != 0) {
         //   drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
         // }
         break;
-      case 3:
+      // case 3:
         // track railcom toggle, just redraw track with new railcom state
         // if (fullTurnSteps != 0) {
         //   drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
         // }
-        break;
+        // break;
     }      
       // toggle door to track w/redraw
       if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
@@ -183,7 +188,7 @@ void TurntableCallback(uint16_t callin) {
   }
   else {
     // Adjust index relative to the first non-track consumer event
-    index = index - (NUM_TABLE_EVENTS + ConfigMemHelper_config_data.attributes.TrackCount * 4);
+    index = index - (NUM_TABLE_EVENTS + ConfigMemHelper_config_data.attributes.TrackCount * 3);
 
     // The next 3 consumer events are luminosity / bridge controls (consumed locally)
     if (index < 3) {
@@ -215,12 +220,10 @@ void TurntableCallback(uint16_t callin) {
       int doorIdx = (int)index - 3;  // 0-based door number
       if (doorIdx >= 0 && doorIdx < ConfigMemHelper_config_data.attributes.DoorCount) {
         // Mirror Roundhouse producer state into the Turntable's producer_status[] slot
-        ConfigMemHelper_config_data.producer_status[2 + doorIdx] =
-            ConfigMemHelper_config_data.consumer_status[callin];
+        ConfigMemHelper_config_data.producer_status[2 + doorIdx] = ConfigMemHelper_config_data.consumer_status[callin];
         // Redraw every track whose door indicator belongs to this servo
         for (int t = 1; t <= ConfigMemHelper_config_data.attributes.TrackCount; t++) {
-          if (ConfigMemHelper_config_data.Tracks[t].doorPresent &&
-              ConfigMemHelper_config_data.Tracks[t].servoNumber == doorIdx) {
+          if (ConfigMemHelper_config_data.Tracks[t].doorPresent && ConfigMemHelper_config_data.Tracks[t].servoNumber == doorIdx) {
             if (activeScreen == 1 && fullTurnSteps != 0) {
               // Home page: radial track line
               drawTrack(t, ((ConfigMemHelper_config_data.Tracks[t].trackFront * 360) / fullTurnSteps));
@@ -721,8 +724,38 @@ length = TT_DIA - 40;
  BPt3Y = CPtFrontY + (CosAngle * width / 2);
  BPt4X = CPtFrontX + (SineAngle * width / 2);
  BPt4Y = CPtFrontY - (CosAngle * width / 2);
-tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, RailColor);
-tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, RailColor);
+ switch (ConfigMemHelper_config_data.consumer_status[NUM_EVENT])
+ {
+    case EVENT_STATUS_UNKNOWN:
+      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, RailColor);
+      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, RailColor);
+      break;
+
+    case EVENT_STATUS_SET:
+      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, TFT_RED);
+      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, TFT_RED);
+      break;
+
+    case EVENT_STATUS_CLEAR:
+      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, TFT_GREEN);
+      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, TFT_GREEN);
+      break;
+  }
+
+// draw track occupancy and railcom info
+char buf[20];
+  if (_RailCom[0].occupied) {
+      // e.g., draw "Loco 42 (Fwd)" next to the track label
+      sprintf(buf, "%d%s",
+          _RailCom[0].dcc_address,
+          _RailCom[0].direction == dcc_detector_occupied_forward ? " Fwd" :
+          _RailCom[0].direction == dcc_detector_occupied_reverse ? " Rev" : "");
+  } else {
+      sprintf(buf, "---");  // track empty
+  }
+  tft.setTextDatum(MC_DATUM);  // Set text plotting reference datum to Middle Center 
+  tft.setTextPadding(tft.textWidth("999999999", 2)); // get the width of the text in pixels
+  tft.drawString(buf, xC, yC, 2);  // draw the known loco on the track if occupied, or "---" if empty
 
 float CPtShackX = BPt1X + (CosAngle * offset);
 float CPtShackY = BPt1Y + (SineAngle * offset);
@@ -791,6 +824,8 @@ if (pixelsOn)
 
 void drawTracks()
 {
+    _railcom_dirty = false;
+
   for (int i = 1; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
     if (fullTurnSteps != 0) {
       drawTrack(i, ((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
@@ -834,8 +869,23 @@ void drawTrack(int track, float angle)
   float BPt4X = CPtFrontX + (SineAngle * width / 2);
   float BPt4Y = CPtFrontY - (CosAngle * width / 2);
 
-  tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, RailColor);
-  tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, RailColor);
+  switch (ConfigMemHelper_config_data.consumer_status[NUM_TABLE_EVENTS + (track-1)*3 + 2])
+  {
+      case EVENT_STATUS_UNKNOWN:
+        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, RailColor);
+        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, RailColor);
+        break;
+
+      case EVENT_STATUS_SET:
+        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, TFT_RED);
+        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, TFT_RED);
+        break;
+
+      case EVENT_STATUS_CLEAR:
+        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, TFT_GREEN);
+        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, TFT_GREEN);
+        break;
+    }
 
   float CPtMidX = xC + (CosAngle * (length+(offset*.6)) / 2);
   float CPtMidY = yC + (SineAngle * (length+(offset*.6)) / 2);
@@ -873,13 +923,29 @@ void drawTrack(int track, float angle)
 
   // door position button (state determined)
   length = TT_DIA +(offset*4);
+  CPtFrontX = xC + (CosAngle * (length) / 2);
+  CPtFrontY = yC + (SineAngle * (length) / 2);
+  BPt3X = CPtFrontX - (SineAngle * width / 2);
+  BPt3Y = CPtFrontY + (CosAngle * width / 2);
+  BPt4X = CPtFrontX + (SineAngle * width / 2);
+  BPt4Y = CPtFrontY - (CosAngle * width / 2);
+
+  _RailCom[track].dirty = false;
+  char buf[20];
+  if (_RailCom[track].occupied) {
+      // e.g., draw "Loco 42 (Fwd)" next to the track label
+      sprintf(buf, "%d%s",
+          _RailCom[track].dcc_address,
+          _RailCom[track].direction == dcc_detector_occupied_forward ? " Fwd" :
+          _RailCom[track].direction == dcc_detector_occupied_reverse ? " Rev" : "");
+  } else {
+      sprintf(buf, "---");  // track empty
+  }
+  tft.setTextDatum(MR_DATUM);  // Set text plotting reference datum to Middle Right 
+  tft.setTextPadding(tft.textWidth("9999", 2)); // get the width of the text in pixels
+  tft.drawString(buf, BPt4X, BPt3Y, 2);  // draw the known loco on the track if occupied, or "---" if empty
+  
   if (ConfigMemHelper_config_data.Tracks[track].doorPresent) {
-    CPtFrontX = xC + (CosAngle * (length) / 2);
-    CPtFrontY = yC + (SineAngle * (length) / 2);
-    BPt3X = CPtFrontX - (SineAngle * width / 2);
-    BPt3Y = CPtFrontY + (CosAngle * width / 2);
-    BPt4X = CPtFrontX + (SineAngle * width / 2);
-    BPt4Y = CPtFrontY - (CosAngle * width / 2);
 
 // need to integrate with door state determined by events consumed from other node
 
@@ -901,7 +967,6 @@ void drawTrack(int track, float angle)
     setHotSpot8(box+2, BPt3X, BPt3Y, BPt4X, BPt4Y, BPt3X, BPt3Y, BPt4X, BPt4Y);
   }
 // else tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_BLACK); 
-
 
 }
 

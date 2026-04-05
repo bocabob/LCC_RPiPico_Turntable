@@ -83,7 +83,7 @@ static void _load_defaults_attributes(openlcb_node_t *openlcb_node, config_mem_t
     config->attributes.tracks[t].Front = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for track front
     config->attributes.tracks[t].Back = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for track back
     config->attributes.tracks[t].Occupancy = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for track occupancy
-    config->attributes.tracks[t].RailCom = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for track railcom
+    config->attributes.tracks[t].RailCom = 0; // EventID for track railcom
     config->attributes.tracks[t].steps = 0; // Default position in steps for each track
   }
     config->attributes.tracks[1].steps = swap_endian32(absPosition(entryTrack1)); // Default position in steps for each track
@@ -128,7 +128,7 @@ static void _load_defaults_status(openlcb_node_t *openlcb_node, config_mem_t *co
   uint8_t event_state[2+12+28]; // Array to hold the state of each event (on/off/unknown) for the 42 events defined in the configuration
 
 */
-  for (int i = 0; i < (5+4*MAX_TRACKS+3); i++) {
+  for (int i = 0; i < (5+3*MAX_TRACKS+3); i++) {
     config->consumer_status[i] = EVENT_STATUS_UNKNOWN; // Default event state is unknown (0)
   }
 
@@ -141,7 +141,7 @@ static void _load_defaults_application(openlcb_node_t *openlcb_node, config_mem_
   // Initialise all track slots to safe defaults; actual positions are derived from
   // CDI attributes by Set_Application_Values_From_Config() called below.
   for (int i = 0; i < (int)(sizeof(config->Tracks) / sizeof(TrackAddress)); i++) {
-    config->Tracks[i].address = 500 + i;
+    config->Tracks[i].address =  i;
     config->Tracks[i].trackFront = 0;
     config->Tracks[i].trackBack = (FULL_TURN_STEPS / 2);
     config->Tracks[i].doorPresent = false;

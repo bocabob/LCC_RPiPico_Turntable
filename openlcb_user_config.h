@@ -16,6 +16,8 @@
 #define OPENLCB_COMPILE_BROADCAST_TIME
 #define OPENLCB_COMPILE_FIRMWARE
 
+#define OPENLCB_COMPILE_DCC_DETECTOR
+
 // =============================================================================
 // Core Message Buffer Pool
 // =============================================================================
@@ -57,7 +59,7 @@
 #define USER_DEFINED_PRODUCER_COUNT                  64
 #define USER_DEFINED_PRODUCER_RANGE_COUNT            5
 #define USER_DEFINED_CONSUMER_COUNT                  64
-#define USER_DEFINED_CONSUMER_RANGE_COUNT            5
+#define USER_DEFINED_CONSUMER_RANGE_COUNT            25
 
 // =============================================================================
 // Configuration Memory (requires OPENLCB_COMPILE_CONFIG_MEMORY)

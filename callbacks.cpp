@@ -49,6 +49,7 @@
 #include "src/openlcb/openlcb_application.h"
 #include "src/openlcb/openlcb_buffer_store.h"
 #include "src/drivers/canbus/can_buffer_store.h"
+#include "src/openlcb/openlcb_application_dcc_detector.h"
 
 extern void drawFastClock(int hour, int minute);
 extern void TurntableCallback(uint16_t callin);
@@ -56,6 +57,29 @@ extern config_mem_t ConfigMemHelper_config_data;
 
 static int16_t _100ms_ticks = 0;
 static int16_t _nvm_write_ticks = 0;
+
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+railcom_info_t _RailCom[MAX_TRACKS] = {};
+volatile bool _railcom_dirty = false;
+
+static void _handle_railcom_event(event_id_t event_id) {
+    node_id_t detector_id = OpenLcbApplicationDccDetector_extract_detector_id(event_id);
+
+    for (int i = 0; i < ConfigMemHelper_config_data.attributes.TrackCount; i++) {
+        event_id_t base = ConfigMemHelper_config_data.attributes.tracks[i].RailCom;
+        if (base == 0) continue;
+        if (OpenLcbApplicationDccDetector_extract_detector_id(base) != detector_id) continue;
+
+        _RailCom[i].occupied     = !OpenLcbApplicationDccDetector_is_track_empty(event_id);
+        _RailCom[i].direction    = OpenLcbApplicationDccDetector_extract_direction(event_id);
+        _RailCom[i].address_type = OpenLcbApplicationDccDetector_extract_address_type(event_id);
+        _RailCom[i].dcc_address  = OpenLcbApplicationDccDetector_extract_dcc_address(event_id);
+        _RailCom[i].dirty        = true;
+        _railcom_dirty           = true;
+        break;
+    }
+}
+#endif /* OPENLCB_COMPILE_DCC_DETECTOR */
 
 // Deferred EEPROM write-back: set to true whenever RAM config changes that need
 // to survive a power cycle.  The 100ms timer writes to EEPROM once the flag has
@@ -95,8 +119,10 @@ void Callbacks_on_consumed_event_identified(openlcb_node_t *openlcb_node, uint16
   // If was a range hit then index will be 0xFFFF and the event_id is the event that was hit.
 
   if (index == 0xFFFF) {
-
-    return;  // range hit — no specific consumer entry to update
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+    _handle_railcom_event(*event_id);
+#endif
+    return;
 
   } else {
 
@@ -130,7 +156,7 @@ void Callbacks_on_consumed_event_identified(openlcb_node_t *openlcb_node, uint16
     // (5 table + TrackCount*4 track + 3 luminosity events come first)
     {
       int firstDoorIdx = NUM_TABLE_EVENTS +
-                         (int)ConfigMemHelper_config_data.attributes.TrackCount * 4 + 3;
+                         (int)ConfigMemHelper_config_data.attributes.TrackCount * 3 + 3;
       int lastDoorIdx  = firstDoorIdx +
                          (int)ConfigMemHelper_config_data.attributes.DoorCount;
       if ((int)index >= firstDoorIdx && (int)index < lastDoorIdx) {
@@ -146,8 +172,10 @@ void Callbacks_on_consumed_event_pcer(openlcb_node_t *openlcb_node, uint16_t ind
   // If was a range hit then index will be 0xFFFF and the event_id is the event that was hit.
 
   if (index == 0xFFFF) {
-
-    return;  // range hit — no specific consumer entry to update
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+    _handle_railcom_event(*event_id);
+#endif
+    return;
 
   } else {
 

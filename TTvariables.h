@@ -66,7 +66,7 @@ TrackAddress;
 
 const char TrackName[MAX_TRACKS][25]=
 {
-	"                     ",
+	"Turntable Bridge ",          
   "Entry Track 1  ",
   "Entry Track 2  ",
   "Entry Track 3  ",

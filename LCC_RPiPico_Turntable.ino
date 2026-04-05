@@ -270,12 +270,16 @@ void _register_consumers(void) {
   // the contiguous consumer_status[] block is fully packed with no gap at slot 0.
   for (int i = 1; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
     int slot = i - 1;  // zero-based slot within the track block of consumer_status[]
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Front),    ConfigMemHelper_config_data.consumer_status[index + slot*4]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Back),     ConfigMemHelper_config_data.consumer_status[index + slot*4 + 1]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Occupancy), ConfigMemHelper_config_data.consumer_status[index + slot*4 + 2]);
-    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].RailCom),   ConfigMemHelper_config_data.consumer_status[index + slot*4 + 3]);
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Front),    ConfigMemHelper_config_data.consumer_status[index + slot*3]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the consumer event ID
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Back),     ConfigMemHelper_config_data.consumer_status[index + slot*3 + 1]);
+    OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].Occupancy), ConfigMemHelper_config_data.consumer_status[index + slot*3 + 2]);
+    // need to check if the RailCom event ID is non-zero before registering it, since it is optional and may not be set for all tracks.  If it is zero then skip registration since zero is not a valid event ID and the OpenLCB stack will reject attempts to register it, which causes the rest of the registration calls to be ignored and the expected consumer events will not be registered.
+    if (ConfigMemHelper_config_data.attributes.tracks[i].RailCom != 0) {
+      OpenLcbApplication_register_consumer_range(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.tracks[i].RailCom), EVENT_RANGE_COUNT_32768);  // register the RailCom event ID as a consumer range to allow for future expansion with additional RailCom-related events if needed without requiring a firmware update to add new consumer event ID registration calls
+      //extern bool OpenLcbApplication_register_consumer_range(openlcb_node_t *openlcb_node, event_id_t event_id_base, event_range_count_enum range_size);
+    }
   }
-  index += ConfigMemHelper_config_data.attributes.TrackCount*4;
+  index += ConfigMemHelper_config_data.attributes.TrackCount*3;
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidBridge), ConfigMemHelper_config_data.consumer_status[index]);
   index++;
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidHighLuminosity_On), ConfigMemHelper_config_data.consumer_status[index]);

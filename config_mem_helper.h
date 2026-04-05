@@ -81,7 +81,7 @@ typedef struct{
   
 // modify as desired
 // data not used by CDI 
-  event_status_enum consumer_status[5+4*MAX_TRACKS+3+MAX_DOORS]; // Array to hold the state of each event (on/off/unknown); +MAX_DOORS for door state sync events
+  event_status_enum consumer_status[5+3*MAX_TRACKS+3+MAX_DOORS]; // Array to hold the state of each event (on/off/unknown); +MAX_DOORS for door state sync events
   event_status_enum producer_status[2+MAX_DOORS+2]; // Array to hold the state of each event (on/off/unknown) for the events defined in the configuration
   TrackAddress Tracks[MAX_TRACKS];
   ReferenceStep References[NumberOfReferences];
