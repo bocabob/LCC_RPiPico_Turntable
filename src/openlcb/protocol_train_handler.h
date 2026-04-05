@@ -42,11 +42,13 @@
  * Called from the main statemachine when a train protocol message is received.
  *
  * @author Jim Kueneman
- * @date 9 Mar 2026
+ * @date 20 Mar 2026
  *
  * @see openlcb_application_train.h - Layer 2 state and API
  */
 
+// This is a guard condition so that contents of this file are not included
+// more than once.
 #ifndef __OPENLCB_PROTOCOL_TRAIN_HANDLER__
 #define __OPENLCB_PROTOCOL_TRAIN_HANDLER__
 
@@ -145,7 +147,7 @@
 
 #ifdef __cplusplus
 extern "C" {
-#endif
+#endif /* __cplusplus */
 
         /**
          * @brief Initializes the Train Control Protocol handler.
@@ -186,9 +188,24 @@ extern "C" {
     extern void ProtocolTrainHandler_handle_emergency_event(
             openlcb_statemachine_info_t *statemachine_info, event_id_t event_id);
 
+    // =========================================================================
+    // Emergency Event Classification
+    //
+    // Moved from openlcb_utilities to this module so the linker only pulls in
+    // train code when OPENLCB_COMPILE_TRAIN is defined.
+    // =========================================================================
+
+        /**
+         * @brief Returns true if the event ID is one of the 4 well-known emergency events.
+         *
+         * @param event_id 64-bit @ref event_id_t to test.
+         *
+         * @return true if the event ID matches a well-known emergency event.
+         */
+    extern bool ProtocolTrainHandler_is_emergency_event(event_id_t event_id);
 
 #ifdef __cplusplus
 }
-#endif
+#endif /* __cplusplus */
 
 #endif /* __OPENLCB_PROTOCOL_TRAIN_HANDLER__ */

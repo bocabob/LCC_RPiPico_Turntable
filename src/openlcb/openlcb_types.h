@@ -44,20 +44,44 @@
 #define __OPENLCB_OPENLCB_TYPES__
 
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
-#if __has_include("openlcb_user_config.h")
-#include "openlcb_user_config.h"
-#elif __has_include("../../openlcb_user_config.h")
-#include "../../openlcb_user_config.h"
-#elif __has_include("../../../openlcb_user_config.h")
-#include "../../../openlcb_user_config.h"
+#ifdef __has_include
+  #if __has_include("openlcb_user_config.h")
+  #include "openlcb_user_config.h"
+  #elif __has_include("../../openlcb_user_config.h")
+  #include "../../openlcb_user_config.h"
+  #elif __has_include("../../../openlcb_user_config.h")
+  #include "../../../openlcb_user_config.h"
+  #elif __has_include("../../../../openlcb_user_config.h")
+  #include "../../../../openlcb_user_config.h"
+  #else
+  #error "openlcb_user_config.h not found. Copy openlcb_user_config.h/.c from templates/ to your project root, then add '.' to your compiler include dirs (MPLab: Project Properties -> xc16-gcc -> Preprocessing and messages -> C include dirs -> add '.')"
+  #endif
 #else
-#error "openlcb_user_config.h not found. Copy templates/typical/openlcb_user_config.h (or templates/bootloader/openlcb_user_config.h) to your project include path."
+  // Compiler does not support __has_include (e.g. XC16).
+  //
+  // =========================================================================
+  // If the next line fails with "openlcb_user_config.h: No such file or directory":
+  //
+  //   1. Copy openlcb_user_config.h and openlcb_user_config.c from the
+  //      OpenLcbCLib templates/ folder into your project root directory
+  //      (the folder containing your .X project).
+  //
+  //   2. Add "." to your compiler include search path:
+  //      MPLab: Project Properties -> xc16-gcc -> Option categories:
+  //             Preprocessing and messages -> C include dirs -> add "."
+  //      Command line: add -I. to your CFLAGS
+  //
+  //   Note: -I does NOT search subdirectories. The "." must point to the
+  //   directory where openlcb_user_config.h is located.
+  // =========================================================================
+  #include "openlcb_user_config.h"
 #endif
 
-#ifdef	__cplusplus
-  extern "C" {
+#ifdef __cplusplus
+extern "C" {
 #endif /* __cplusplus */
 
     /**
@@ -101,6 +125,19 @@
 #error "USER_DEFINED_STREAM_BUFFER_DEPTH must be >= 1 to avoid a zero-length array"
 #endif
 
+    /** @brief Maximum bytes in a single stream data frame */
+#ifndef USER_DEFINED_STREAM_BUFFER_LEN
+#define USER_DEFINED_STREAM_BUFFER_LEN               256
+#endif
+
+    /** @brief Maximum concurrent active streams across all nodes */
+#ifndef USER_DEFINED_MAX_CONCURRENT_ACTIVE_STREAMS
+#define USER_DEFINED_MAX_CONCURRENT_ACTIVE_STREAMS   1
+#endif
+#if USER_DEFINED_MAX_CONCURRENT_ACTIVE_STREAMS < 1
+#error "USER_DEFINED_MAX_CONCURRENT_ACTIVE_STREAMS must be >= 1 to avoid a zero-length array"
+#endif
+
     /** @brief Maximum number of virtual nodes that can be allocated */
 #ifndef USER_DEFINED_NODE_BUFFER_DEPTH
 #error "USER_DEFINED_NODE_BUFFER_DEPTH must be defined in openlcb_user_config.h"
@@ -109,26 +146,6 @@
 #error "USER_DEFINED_NODE_BUFFER_DEPTH must be >= 1 to avoid a zero-length array"
 #endif
 
-    /** @brief Size of CDI buffer in bytes */
-#ifndef USER_DEFINED_CDI_LENGTH
-#error "USER_DEFINED_CDI_LENGTH must be defined in openlcb_user_config.h"
-#endif
-#if USER_DEFINED_CDI_LENGTH < 1
-#error "USER_DEFINED_CDI_LENGTH must be >= 1 to avoid a zero-length array"
-#endif
-
-    /** @brief Size of FDI buffer in bytes.  Equals USER_DEFINED_FDI_LENGTH when
-     *         OPENLCB_COMPILE_TRAIN is defined; collapses to 1 byte otherwise to save RAM. */
-#ifndef USER_DEFINED_FDI_LENGTH
-#error "USER_DEFINED_FDI_LENGTH must be defined in openlcb_user_config.h"
-#endif
-#ifndef OPENLCB_COMPILE_TRAIN
-#undef  USER_DEFINED_FDI_LENGTH
-#define USER_DEFINED_FDI_LENGTH 1
-#endif
-#if USER_DEFINED_FDI_LENGTH < 1
-#error "USER_DEFINED_FDI_LENGTH must be >= 1 to avoid a zero-length array"
-#endif
 
     /** @brief Maximum number of events a node can produce */
 #ifndef USER_DEFINED_PRODUCER_COUNT
@@ -220,7 +237,7 @@
 #define LEN_SNIP_SOFTWARE_VERSION_BUFFER 21
 
     /** @brief SNIP user-assigned name field length (including null) */
-#define LEN_SNIP_USER_NAME_BUFFER 62
+#define LEN_SNIP_USER_NAME_BUFFER 63
 
     /** @brief SNIP user description field length (including null) */
 #define LEN_SNIP_USER_DESCRIPTION_BUFFER 64
@@ -602,7 +619,7 @@
         uint8_t low_address_space;
         char description[LEN_CONFIG_MEM_OPTIONS_DESCRIPTION];
 
-    } user_configuration_options;
+    } user_configuration_options_t;
 
         /** @brief Properties of a single configuration memory address space. */
     typedef struct {
@@ -629,7 +646,7 @@
         uint64_t protocol_support;              /**< Protocol Support Indicator bits */
         uint8_t consumer_count_autocreate;
         uint8_t producer_count_autocreate;
-        user_configuration_options configuration_options;
+        user_configuration_options_t configuration_options;
         user_address_space_info_t address_space_configuration_definition; /**< Space 0xFF */
         user_address_space_info_t address_space_all;                     /**< Space 0xFE */
         user_address_space_info_t address_space_config_memory;           /**< Space 0xFD */
@@ -638,8 +655,8 @@
         user_address_space_info_t address_space_train_function_definition_info; /**< Space 0xFA */
         user_address_space_info_t address_space_train_function_config_memory;   /**< Space 0xF9 */
         user_address_space_info_t address_space_firmware;                 /**< Space 0xEF */
-        uint8_t cdi[USER_DEFINED_CDI_LENGTH];   /**< CDI XML byte array; if unused set to { 0x00 } */
-        uint8_t fdi[USER_DEFINED_FDI_LENGTH];   /**< FDI XML byte array; if unused set to { 0x00 } */
+        const uint8_t *cdi;   /**< Pointer to CDI XML byte array; NULL when unused */
+        const uint8_t *fdi;   /**< Pointer to FDI XML byte array; NULL when unused */
 
     } node_parameters_t;
 
@@ -888,6 +905,20 @@
         write_config_mem_space_func_t write_space_func;
 
     } config_mem_write_request_info_t;
+
+        /** @brief Completion callback for firmware write operations.
+         *
+         * @details Passed to the user's firmware_write callback so application
+         * code can signal success or failure without knowing the reply datagram
+         * internals.  The library implementation loads the appropriate Write
+         * Reply OK or Write Reply Fail datagram and marks the outgoing message
+         * valid.
+         *
+         * @param statemachine_info            Context.
+         * @param config_mem_write_request_info Write request context.
+         * @param success                       true = write OK, false = write failed.
+         */
+    typedef void (*write_result_t)(openlcb_statemachine_info_t *statemachine_info, config_mem_write_request_info_t *config_mem_write_request_info, bool success);
 
 #ifdef __cplusplus
 }

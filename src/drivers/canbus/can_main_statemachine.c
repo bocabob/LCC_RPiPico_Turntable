@@ -47,7 +47,6 @@
 #include "can_buffer_store.h"
 #include "can_buffer_fifo.h"
 #include "can_utilities.h"
-#include "alias_mapping_listener.h"
 #include "../../openlcb/openlcb_defines.h"
 #include "../../openlcb/openlcb_types.h"
 #include "../../openlcb/openlcb_utilities.h"
@@ -175,7 +174,7 @@ static bool _process_duplicate_aliases(alias_mapping_info_t *alias_mapping_info)
 }
 
     /** @brief Returns a pointer to the internal state machine context (for testing/debugging). */
-can_statemachine_info_t *CanMainStateMachine_get_can_statemachine_info(void) {
+can_statemachine_info_t *CanMainStatemachine_get_can_statemachine_info(void) {
 
     return (&_can_statemachine_info);
 
@@ -350,28 +349,36 @@ bool CanMainStatemachine_handle_try_enumerate_next_node(void) {
      * @brief Probes one listener alias for staleness and queues an AME if due.
      *
      * @details Algorithm:
-     * -# Call ListenerAliasTable_check_one_verification() with current tick
+     * -# Call _interface->listener_check_one_verification() with current tick
      * -# If non-zero node_id returned: get first node's alias, allocate a CAN
      *    buffer (with lock/unlock), build targeted AME, push to CAN FIFO
      *    (with lock/unlock)
      * -# Return true if an AME was queued, false otherwise
      *
+     * No-ops if listener_check_one_verification is NULL (train support not wired).
+     *
      * @return true if a probe AME was queued, false if nothing to do.
      */
 bool CanMainStatemachine_handle_listener_verification(void) {
 
+    if (!_interface->listener_check_one_verification) {
+
+        return false;
+
+    }
+
     node_id_t probe_id =
-            ListenerAliasTable_check_one_verification(_interface->get_current_tick());
+            _interface->listener_check_one_verification(_interface->get_current_tick());
 
     if (probe_id != 0) {
 
         // Use first node's alias as AME source
-        openlcb_node_t* node = _interface->openlcb_node_get_first(CAN_STATEMACHINE_NODE_ENUMRATOR_KEY);
+        openlcb_node_t *node = _interface->openlcb_node_get_first(CAN_STATEMACHINE_NODE_ENUMRATOR_KEY);
 
         if (node && node->alias != 0) {
 
             _interface->lock_shared_resources();
-            can_msg_t* ame = CanBufferStore_allocate_buffer();
+            can_msg_t *ame = CanBufferStore_allocate_buffer();
             _interface->unlock_shared_resources();
 
             if (ame) {
@@ -483,7 +490,7 @@ void CanMainStatemachine_send_global_alias_enquiry(void) {
      * chain. Priority: duplicate aliases -> outgoing CAN frame ->
      * login frame -> enumerate first node -> enumerate next node.
      */
-void CanMainStateMachine_run(void) {
+void CanMainStatemachine_run(void) {
 
     _interface->lock_shared_resources();
     OpenLcbBufferList_check_timeouts(_interface->get_current_tick());

@@ -264,23 +264,25 @@ void Callbacks_operations_request_factory_reset(openlcb_statemachine_info_t *sta
   printf("Factory Reset: NodeID = 0x%06llX\n", OpenLcbUtilities_extract_node_id_from_openlcb_payload(statemachine_info->incoming_msg_info.msg_ptr, 0));
 }
 
-void Callbacks_write_firmware(openlcb_statemachine_info_t *statemachine_info, config_mem_write_request_info_t *config_mem_write_request_info) {
+void Callbacks_write_firmware(openlcb_statemachine_info_t *statemachine_info, config_mem_write_request_info_t *config_mem_write_request_info, write_result_t write_result) {
+
+  bool success = false;
 
   if (_image_file) {
 
     if (_image_file.write(config_mem_write_request_info->write_buffer[0], config_mem_write_request_info->bytes) == config_mem_write_request_info->bytes) {
 
       _bytes_written = _bytes_written + config_mem_write_request_info->bytes;
-      OpenLcbUtilities_load_config_mem_reply_write_ok_message_header(statemachine_info, config_mem_write_request_info);
+      success = true;
 
     } else {
 
       _firmware_image_valid = false;
-      OpenLcbUtilities_load_config_mem_reply_write_fail_message_header(statemachine_info, config_mem_write_request_info, ERROR_TEMPORARY_TRANSFER_ERROR);
+
     }
   }
 
-  statemachine_info->outgoing_msg_info.valid = true;  // Flag the outgoing message we loaded above to send
+  write_result(statemachine_info, config_mem_write_request_info, success);
 }
 
 void Callbacks_freeze(openlcb_statemachine_info_t *statemachine_info, config_mem_operations_request_info_t *config_mem_operations_request_info) {

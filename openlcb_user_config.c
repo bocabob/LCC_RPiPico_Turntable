@@ -41,115 +41,9 @@
 
 openlcb_node_t *OpenLcbUserConfig_node_id = NULL;
 
-const node_parameters_t OpenLcbUserConfig_node_parameters = {
 
-    .consumer_count_autocreate = 0,  // bad idea, likely removing from library
-    .producer_count_autocreate = 0,  // bad idea, likely removing from library
+static const uint8_t _cdi_data[] = {
 
-    .snip.mfg_version = 4,
-    .snip.name = "Gamble",
-    .snip.model = "Turntable Controller",
-    .snip.hardware_version = "2.6A",
-    .snip.software_version = "2.1.0",
-    .snip.user_version = 2,
-
-    .protocol_support = (PSI_DATAGRAM |
-                         PSI_MEMORY_CONFIGURATION |
-                         PSI_EVENT_EXCHANGE |
-                         PSI_SIMPLE_NODE_INFORMATION |
-                         PSI_CONFIGURATION_DESCRIPTION_INFO |
-                         PSI_FIRMWARE_UPGRADE),
-
-    .configuration_options.high_address_space = 0xFF,  // 255 decimal
-    .configuration_options.low_address_space = 0xEF,  // 239 decimal
-    .configuration_options.read_from_manufacturer_space_0xfc_supported = true,
-    .configuration_options.read_from_user_space_0xfb_supported = true,
-    .configuration_options.stream_read_write_supported = false,
-    .configuration_options.unaligned_reads_supported = true,
-    .configuration_options.unaligned_writes_supported = true,
-    .configuration_options.write_to_user_space_0xfb_supported = true,
-    .configuration_options.write_under_mask_supported = true,
-    .configuration_options.description = "Node memory configuration capabilities",
-
-    // Space 0xFF (255 decimal)
-    .address_space_configuration_definition.read_only = true,
-    .address_space_configuration_definition.present = true,
-    .address_space_configuration_definition.low_address_valid = false,
-    .address_space_configuration_definition.low_address = 0x0,               // 0 decimal
-    .address_space_configuration_definition.highest_address = 4577-1,           
-    // .address_space_configuration_definition.address_space = 0xFF,  // 255 decimal
-    // .address_space_configuration_definition.description = "",
-  .address_space_configuration_definition.address_space = CONFIG_MEM_SPACE_CONFIGURATION_DEFINITION_INFO,
-  .address_space_configuration_definition.description = "Configuration definition info",
-
-    // Space 0xFE (254 decimal)
-    .address_space_all.read_only = true,
-    .address_space_all.present = true,
-    .address_space_all.low_address_valid = false,
-    .address_space_all.low_address = 0x0,               // 0 decimal
-    .address_space_all.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
-    .address_space_all.address_space = 0xFE,  // 254 decimal
-    .address_space_all.description = "",
-
-    // Space 0xFD (253 decimal)
-    .address_space_config_memory.read_only = false,
-    .address_space_config_memory.present = true,
-    .address_space_config_memory.low_address_valid = false,
-    .address_space_config_memory.low_address = 0x0,               // 0 decimal
-    // .address_space_config_memory.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
-    // .address_space_config_memory.address_space = 0xFD,  // 253 decimal
-    // .address_space_config_memory.description = "",
-  .address_space_config_memory.highest_address = (I2C_DEVICESIZE - 1),  // This is important for multi node applications as the config memory for node N will start at (N * high-low) and they all must be the same for any parameter file in a single app
-  .address_space_config_memory.address_space = CONFIG_MEM_SPACE_CONFIGURATION_MEMORY,
-  .address_space_config_memory.description = "Configuration memory storage",
-
-    // Space 0xFC (252 decimal)
-    .address_space_acdi_manufacturer.read_only = true,
-    .address_space_acdi_manufacturer.present = true,
-    .address_space_acdi_manufacturer.low_address_valid = false,
-    .address_space_acdi_manufacturer.low_address = 0x0,               // 0 decimal
-    .address_space_acdi_manufacturer.highest_address = 0x3E,              // 62 decimal
-    .address_space_acdi_manufacturer.address_space = 0xFC,  // 252 decimal
-    .address_space_acdi_manufacturer.description = "",
-
-    // Space 0xFB (251 decimal)
-    .address_space_acdi_user.read_only = false,
-    .address_space_acdi_user.present = true,
-    .address_space_acdi_user.low_address_valid = false,
-    .address_space_acdi_user.low_address = 0x0,               // 0 decimal
-    .address_space_acdi_user.highest_address = 0x7E,              // 126 decimal
-    .address_space_acdi_user.address_space = 0xFB,  // 251 decimal
-    .address_space_acdi_user.description = "",
-
-    // MUST write these to make sure that the present flag is false, but I generated the wrong name :()
-    // Space 0xFA (250 decimal) (unchecked)
-    .address_space_train_function_definition_info.read_only = true,
-    .address_space_train_function_definition_info.present = false,
-    .address_space_train_function_definition_info.low_address_valid = false,
-    .address_space_train_function_definition_info.low_address = 0x0,               // 0 decimal
-    .address_space_train_function_definition_info.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
-    .address_space_train_function_definition_info.address_space = 0xFA,  // 250 decimal
-    .address_space_train_function_definition_info.description = "",
-
-    // Space 0xF9 (249 decimal) (unchecked)
-    .address_space_train_function_config_memory.read_only = true,
-    .address_space_train_function_config_memory.present = false,
-    .address_space_train_function_config_memory.low_address_valid = false,
-    .address_space_train_function_config_memory.low_address = 0x0,               // 0 decimal
-    .address_space_train_function_config_memory.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
-    .address_space_train_function_config_memory.address_space = 0xF9,  // 249 decimal
-    .address_space_train_function_config_memory.description = "",
-
-    // Space 0xEF (239 decimal)
-    .address_space_firmware.read_only = false,
-    .address_space_firmware.present = true,
-    .address_space_firmware.low_address_valid = false,
-    .address_space_firmware.low_address = 0x0,               // 0 decimal
-    .address_space_firmware.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
-    .address_space_firmware.address_space = 0xEF,  // 239 decimal
-    .address_space_firmware.description = "",
-
-    .cdi = {
 0x3C, 0x3F, 0x78, 0x6D, 0x6C, 0x20, 0x76, 0x65, 0x72, 0x73, 0x69, 0x6F, 0x6E, 0x3D, 0x22, 0x31, 0x2E, 0x30, 0x22, 0x20, 0x65, 0x6E, 0x63, 0x6F, 0x64, 0x69, 0x6E, 0x67, 0x3D, 0x22, 0x55, 0x54, 0x46, 0x2D, 0x38, 0x22, 0x3F, 0x3E,   // <?xml version="1.0" encoding="UTF-8"?>
 0x3C, 0x3F, 0x78, 0x6D, 0x6C, 0x2D, 0x73, 0x74, 0x79, 0x6C, 0x65, 0x73, 0x68, 0x65, 0x65, 0x74, 0x20, 0x74, 0x79, 0x70, 0x65, 0x3D, 0x22, 0x74, 0x65, 0x78, 0x74, 0x2F, 0x78, 0x73, 0x6C, 0x22, 0x20, 0x68, 0x72, 0x65, 0x66, 0x3D, 0x22, 0x68, 0x74, 0x74, 0x70, 0x3A, 0x2F, 0x2F, 0x6F, 0x70, 0x65, 0x6E, 0x6C, 0x63, 0x62, 0x2E, 0x6F, 0x72, 0x67, 0x2F, 0x74, 0x72, 0x75, 0x6E, 0x6B, 0x2F, 0x70, 0x72, 0x6F, 0x74, 0x6F, 0x74, 0x79, 0x70, 0x65, 0x73, 0x2F, 0x78, 0x6D, 0x6C, 0x2F, 0x78, 0x73, 0x6C, 0x74, 0x2F, 0x63, 0x64, 0x69, 0x2E, 0x78, 0x73, 0x6C, 0x22, 0x3F, 0x3E,   // <?xml-stylesheet type="text/xsl" href="http://openlcb.org/trunk/prototypes/xml/xslt/cdi.xsl"?>
 0x3C, 0x63, 0x64, 0x69, 0x20, 0x78, 0x6D, 0x6C, 0x6E, 0x73, 0x3A, 0x78, 0x73, 0x69, 0x3D, 0x22, 0x68, 0x74, 0x74, 0x70, 0x3A, 0x2F, 0x2F, 0x77, 0x77, 0x77, 0x2E, 0x77, 0x33, 0x2E, 0x6F, 0x72, 0x67, 0x2F, 0x32, 0x30, 0x30, 0x31, 0x2F, 0x58, 0x4D, 0x4C, 0x53, 0x63, 0x68, 0x65, 0x6D, 0x61, 0x2D, 0x69, 0x6E, 0x73, 0x74, 0x61, 0x6E, 0x63, 0x65, 0x22, 0x20, 0x78, 0x73, 0x69, 0x3A, 0x6E, 0x6F, 0x4E, 0x61, 0x6D, 0x65, 0x73, 0x70, 0x61, 0x63, 0x65, 0x53, 0x63, 0x68, 0x65, 0x6D, 0x61, 0x4C, 0x6F, 0x63, 0x61, 0x74, 0x69, 0x6F, 0x6E, 0x3D, 0x22, 0x68, 0x74, 0x74, 0x70, 0x3A, 0x2F, 0x2F, 0x6F, 0x70, 0x65, 0x6E, 0x6C, 0x63, 0x62, 0x2E, 0x6F, 0x72, 0x67, 0x2F, 0x73, 0x63, 0x68, 0x65, 0x6D, 0x61, 0x2F, 0x63, 0x64, 0x69, 0x2F, 0x31, 0x2F, 0x34, 0x2F, 0x63, 0x64, 0x69, 0x2E, 0x78, 0x73, 0x64, 0x22, 0x3E,   // <cdi xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="http://openlcb.org/schema/cdi/1/4/cdi.xsd">
@@ -292,7 +186,115 @@ const node_parameters_t OpenLcbUserConfig_node_parameters = {
 0x3C, 0x2F, 0x73, 0x65, 0x67, 0x6D, 0x65, 0x6E, 0x74, 0x3E,   // </segment>
 0x3C, 0x2F, 0x63, 0x64, 0x69, 0x3E,   // </cdi>
 0x00    // String terminating null
-},
-    .fdi = { },
+};
+
+
+const node_parameters_t OpenLcbUserConfig_node_parameters = {
+
+    .consumer_count_autocreate = 0,  // bad idea, likely removing from library
+    .producer_count_autocreate = 0,  // bad idea, likely removing from library
+
+    .snip.mfg_version = 4,
+    .snip.name = "Gamble",
+    .snip.model = "Turntable Controller",
+    .snip.hardware_version = "2.6A",
+    .snip.software_version = "2.2.0",
+    .snip.user_version = 2,
+
+    .protocol_support = (PSI_DATAGRAM |
+                         PSI_MEMORY_CONFIGURATION |
+                         PSI_EVENT_EXCHANGE |
+                         PSI_SIMPLE_NODE_INFORMATION |
+                         PSI_CONFIGURATION_DESCRIPTION_INFO |
+                         PSI_FIRMWARE_UPGRADE),
+
+    .configuration_options.high_address_space = 0xFF,  // 255 decimal
+    .configuration_options.low_address_space = 0xEF,  // 239 decimal
+    .configuration_options.read_from_manufacturer_space_0xfc_supported = true,
+    .configuration_options.read_from_user_space_0xfb_supported = true,
+    .configuration_options.stream_read_write_supported = false,
+    .configuration_options.unaligned_reads_supported = true,
+    .configuration_options.unaligned_writes_supported = true,
+    .configuration_options.write_to_user_space_0xfb_supported = true,
+    .configuration_options.write_under_mask_supported = true,
+    .configuration_options.description = "Node memory configuration capabilities",
+
+    // Space 0xFF (255 decimal)
+    .address_space_configuration_definition.read_only = true,
+    .address_space_configuration_definition.present = true,
+    .address_space_configuration_definition.low_address_valid = false,
+    .address_space_configuration_definition.low_address = 0x0,               // 0 decimal
+    .address_space_configuration_definition.highest_address = sizeof(_cdi_data) - 1,        
+    .address_space_configuration_definition.address_space = CONFIG_MEM_SPACE_CONFIGURATION_DEFINITION_INFO,
+    .address_space_configuration_definition.description = "Configuration definition info",
+
+    // Space 0xFE (254 decimal)
+    .address_space_all.read_only = true,
+    .address_space_all.present = true,
+    .address_space_all.low_address_valid = false,
+    .address_space_all.low_address = 0x0,               // 0 decimal
+    .address_space_all.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
+    .address_space_all.address_space = 0xFE,  // 254 decimal
+    .address_space_all.description = "",
+
+    // Space 0xFD (253 decimal)
+    .address_space_config_memory.read_only = false,
+    .address_space_config_memory.present = true,
+    .address_space_config_memory.low_address_valid = false,
+    .address_space_config_memory.low_address = 0x0,               // 0 decimal
+    .address_space_config_memory.highest_address = (I2C_DEVICESIZE - 1),  // This is important for multi node applications as the config memory for node N will start at (N * high-low) and they all must be the same for any parameter file in a single app
+    .address_space_config_memory.address_space = CONFIG_MEM_SPACE_CONFIGURATION_MEMORY,
+    .address_space_config_memory.description = "Configuration memory storage",
+
+    // Space 0xFC (252 decimal)
+    .address_space_acdi_manufacturer.read_only = true,
+    .address_space_acdi_manufacturer.present = true,
+    .address_space_acdi_manufacturer.low_address_valid = false,
+    .address_space_acdi_manufacturer.low_address = 0x0,               // 0 decimal
+    .address_space_acdi_manufacturer.highest_address = 0x3E,              // 62 decimal
+    .address_space_acdi_manufacturer.address_space = 0xFC,  // 252 decimal
+    .address_space_acdi_manufacturer.description = "",
+
+    // Space 0xFB (251 decimal)
+    .address_space_acdi_user.read_only = false,
+    .address_space_acdi_user.present = true,
+    .address_space_acdi_user.low_address_valid = false,
+    .address_space_acdi_user.low_address = 0x0,               // 0 decimal
+    .address_space_acdi_user.highest_address = 0x7E,              // 126 decimal
+    .address_space_acdi_user.address_space = 0xFB,  // 251 decimal
+    .address_space_acdi_user.description = "",
+
+    // MUST write these to make sure that the present flag is false, but I generated the wrong name :()
+    // Space 0xFA (250 decimal) (unchecked)
+    .address_space_train_function_definition_info.read_only = true,
+    .address_space_train_function_definition_info.present = false,
+    .address_space_train_function_definition_info.low_address_valid = false,
+    .address_space_train_function_definition_info.low_address = 0x0,               // 0 decimal
+    .address_space_train_function_definition_info.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
+    .address_space_train_function_definition_info.address_space = 0xFA,  // 250 decimal
+    .address_space_train_function_definition_info.description = "",
+
+    // Space 0xF9 (249 decimal) (unchecked)
+    .address_space_train_function_config_memory.read_only = true,
+    .address_space_train_function_config_memory.present = false,
+    .address_space_train_function_config_memory.low_address_valid = false,
+    .address_space_train_function_config_memory.low_address = 0x0,               // 0 decimal
+    .address_space_train_function_config_memory.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
+    .address_space_train_function_config_memory.address_space = 0xF9,  // 249 decimal
+    .address_space_train_function_config_memory.description = "",
+
+    // Space 0xEF (239 decimal)
+    .address_space_firmware.read_only = false,
+    .address_space_firmware.present = true,
+    .address_space_firmware.low_address_valid = false,
+    .address_space_firmware.low_address = 0x0,               // 0 decimal
+    .address_space_firmware.highest_address = 0xFFFFFFFF,        // 4294967295 decimal
+    .address_space_firmware.address_space = 0xEF,  // 239 decimal
+    .address_space_firmware.description = "",
+
+    .cdi = _cdi_data,
+
+
+    .fdi = NULL,
 
 };

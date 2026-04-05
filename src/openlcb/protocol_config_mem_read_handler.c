@@ -54,7 +54,6 @@
 #include "openlcb_types.h"
 #include "openlcb_utilities.h"
 #include "openlcb_buffer_store.h"
-#include "openlcb_application_train.h"
 
     /** @brief Stored callback interface pointer; set by _initialize(). */
 static interface_protocol_config_mem_read_handler_t *_interface;
@@ -220,8 +219,16 @@ static void _handle_read_request(openlcb_statemachine_info_t *statemachine_info,
 
 }
 
-    /** @brief Read from CDI (0xFF): copy bytes from node->parameters->cdi[]. */
+    /** @brief Read from CDI (0xFF): copy bytes from node->parameters->cdi. */
 void ProtocolConfigMemReadHandler_read_request_config_definition_info(openlcb_statemachine_info_t *statemachine_info, config_mem_read_request_info_t *config_mem_read_request_info) {
+
+    if (!statemachine_info->openlcb_node->parameters->cdi) {
+
+        OpenLcbUtilities_load_config_mem_reply_read_fail_message_header(statemachine_info, config_mem_read_request_info, ERROR_PERMANENT_INVALID_ARGUMENTS);
+        statemachine_info->outgoing_msg_info.valid = true;
+        return;
+
+    }
 
     OpenLcbUtilities_load_config_mem_reply_read_ok_message_header(statemachine_info, config_mem_read_request_info);
 
@@ -235,8 +242,16 @@ void ProtocolConfigMemReadHandler_read_request_config_definition_info(openlcb_st
 
 }
 
-    /** @brief Read from Train FDI (0xFA): copy bytes from node->parameters->fdi[]. */
+    /** @brief Read from Train FDI (0xFA): copy bytes from node->parameters->fdi. */
 void ProtocolConfigMemReadHandler_read_request_train_function_definition_info(openlcb_statemachine_info_t *statemachine_info, config_mem_read_request_info_t *config_mem_read_request_info) {
+
+    if (!statemachine_info->openlcb_node->parameters->fdi) {
+
+        OpenLcbUtilities_load_config_mem_reply_read_fail_message_header(statemachine_info, config_mem_read_request_info, ERROR_PERMANENT_INVALID_ARGUMENTS);
+        statemachine_info->outgoing_msg_info.valid = true;
+        return;
+
+    }
 
     OpenLcbUtilities_load_config_mem_reply_read_ok_message_header(statemachine_info, config_mem_read_request_info);
 
@@ -260,7 +275,7 @@ void ProtocolConfigMemReadHandler_read_request_train_function_config_memory(open
 
     OpenLcbUtilities_load_config_mem_reply_read_ok_message_header(statemachine_info, config_mem_read_request_info);
 
-    train_state_t *state = OpenLcbApplicationTrain_get_state(statemachine_info->openlcb_node);
+    train_state_t *state = (_interface->get_train_state) ? _interface->get_train_state(statemachine_info->openlcb_node) : (train_state_t*) 0;
 
     if (state) {
 
