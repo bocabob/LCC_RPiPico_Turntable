@@ -29,8 +29,7 @@
 #include "BoardSettings.h"
 #include "TTvariables.h"
 #include <I2C_eeprom.h>
-#include <SPI.h>    // Call up the TFT driver library
-#include <TFT_eSPI.h>      // Hardware-specific library
+#include "DisplayDriver.h"  // selects display library; also pulls in <SPI.h>
 
 bool isStepperRunning();
 long getCurrentPosition();

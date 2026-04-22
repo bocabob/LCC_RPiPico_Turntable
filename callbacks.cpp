@@ -65,7 +65,8 @@ volatile bool _railcom_dirty = false;
 static void _handle_railcom_event(event_id_t event_id) {
     node_id_t detector_id = OpenLcbApplicationDccDetector_extract_detector_id(event_id);
 
-    for (int i = 0; i < ConfigMemHelper_config_data.attributes.TrackCount; i++) {
+    // i=0 is the bridge track; i=1..TrackCount are the spur tracks.
+    for (int i = 0; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
         event_id_t base = ConfigMemHelper_config_data.attributes.tracks[i].RailCom;
         if (base == 0) continue;
         if (OpenLcbApplicationDccDetector_extract_detector_id(base) != detector_id) continue;

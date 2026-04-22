@@ -8,9 +8,39 @@
 #ifndef DEFINES_H
 #define DEFINES_H
 
+// ProjectConfig.h is the single source of truth for board/driver selection.
+// It is included here so that ALL translation units (.cpp files) get the same
+// defines through their BoardSettings.h include chain, not just the .ino unit.
+#include "ProjectConfig.h"
+
 // #include <cstdint>
 
 #define ARDUINO_COMPATIBLE
+
+// --------------------------------------------
+//  Board hardware selection
+//  Set in ProjectConfig.h — do not define here or in individual .cpp files.
+// --------------------------------------------
+#if defined(LCC_BOARD_STEPPER_V24)
+  #include "board_configs/BoardPins_Stepper_v24.h"
+#elif defined(LCC_BOARD_STEPPER_V27)
+  #include "board_configs/BoardPins_Stepper_v27.h"
+#else
+  #error "No board version defined. Add #define LCC_BOARD_STEPPER_V24 (or LCC_BOARD_STEPPER_V27) before including BoardSettings.h."
+#endif
+
+// --------------------------------------------
+//  Display config headers — included HERE (sketch root) so that relative paths
+//  like "display_configs/..." resolve correctly regardless of which board header
+//  set the driver define.  Board headers only set the DISPLAY_DRIVER_* define;
+//  they must NOT include the display config directly.
+// --------------------------------------------
+#if defined(DISPLAY_DRIVER_SSD1963_PARALLEL)
+  #include "display_configs/DisplayConfig_SSD1963_parallel.h"
+#elif defined(DISPLAY_DRIVER_RA8876_TFTESPI)
+  #include "display_configs/DisplayConfig_RA8876_SPI.h"
+// DISPLAY_DRIVER_RA8876_NATIVE: no TFT_eSPI config header needed
+#endif
 
 // --------------------------------------------
 // Select ONE of these for Non-volatile Memory Storage
@@ -43,8 +73,8 @@
 // --------------------------------------------
 
 // Define the size of the EEPROM chip or use 4096 if using emulated internal flash storage
-#define I2C_DEVICESIZE      65536  // 24LC512
-// #define I2C_DEVICESIZE      32768  // 24LC256
+// #define I2C_DEVICESIZE      65536  // 24LC512
+#define I2C_DEVICESIZE      32768  // 24LC256
 // #define I2C_DEVICESIZE      16384  // 24LC128
 // #define I2C_DEVICESIZE       8192  // 24LC64
 // #define I2C_DEVICESIZE       4096  // 24LC32    // this is the size to use for internal FLASH EEPROM emulation
@@ -63,63 +93,9 @@
 // #define SERVO_ADDRESS 0x40
 // #define EEPROM_ADDRESS 0x50
 #define STORAGE_ADDR 0x50  // 0x50 is the default address!
-#define STOR_WIRE Wire1     // make Wire1 or Wire
-
-#define I2C_SDA  26           // pin to use
-#define I2C_SCL  27           // pin to use
-// #define I2C2_SDA  4           // pin to use
-// #define I2C2_SCL  5           // pin to use
-
-#define TOUCH_SDA  4
-#define TOUCH_SCL  5
-//                  The touch screen interrupt request pin (T_IRQ) is not used
-#define TOUCH_INT  3
-#define TOUCH_RST  -1
-
-#define TOUCH_WIRE Wire
-
-// #include <NeoPixelBusLg.h>
-
-// #define KeyPad_Int_Pin 2    // Pin for interupt from I2C module
-#define BRIDGE_SENSOR_PIN 0    // Bridge Position Sensor Input (any - 11 / 23)
-#define HOME_SENSOR_PIN 1      // Home Position Sensor Input
-
-#define STEPPER_INTERFACE 1
-#define STEPPER_ENABLE_PIN 14   // (use any - 13 / 31) Uncomment to enable Powering-Off the Stepper if its not running 
-#define STEPPER_STEP_PIN 15      // (use any - 4 / 27)
-#define STEPPER_DIR_PIN 2       // (use any - 5 / 29)
-
-#define NeoPixel_PinA 21        // (use any (mega 22-43) - 12 / 25) for the bridge / board interface
-// #define NeoPixel_PinA 2           // pin to use for the board interface
-// #define NeoPixel_PinB 6           // pin to use for the board interface
-// #define NeoPixel_PinC 7           // pin to use for the board interface
-// #define NeoPixel_PinD 3           // pin to use for the board interface
-
-//——————————————————————————————————————————————————————————————————————————————
-//  MCP2517 connections: adapt theses settings to your design
-//  As hardware SPI is used, you should select pins that support SPI functions.
-//  This code is designed to use SPI
-//  If standard SPI, SPI2 pins are not used then define them
-//    SCK input of MCP2517 is connected to pin #32
-//    SDI input of MCP2517 is connected to pin #0
-//    SDO output of MCP2517 is connected to pin #1
-//  CS input of MCP2517 should be connected to a digital output port
-//  INT output of MCP2517 should be connected to a digital input port, with interrupt capability
-
-// static const byte MCP2517_SCK = 18 ; // SCK input of MCP2517/8
-// static const byte MCP2517_SDI =  19 ; // SI input of MCP2517/8
-// static const byte MCP2517_SDO =  16 ; // SO output of MCP2517/8
-// static const byte MCP2517_CS  = 17 ; // CS input of MCP2517/8
-// static const byte MCP2517_INT = 20 ; // INT output of MCP2517/8
-//——————————————————————————————————————————————————————————————————————————————
-
-#define MCP2517_SPI  SPI   // SPI port to use for MCP2517/8
-
-#define MCP2517_CS  17   // CS input of MCP2517/8
-#define MCP2517_INT 20  // INT output of MCP2517/8
-#define MCP2517_SCK 18  // SCK input of MCP2517/8
-#define MCP2517_SDI 19  // SI input of MCP2517/8
-#define MCP2517_SDO 16  // SO output of MCP2517/8
+// STOR_WIRE, I2C_SDA, I2C_SCL, TOUCH_*, BRIDGE_SENSOR_PIN, HOME_SENSOR_PIN,
+// STEPPER_*, NeoPixel_PinA, MCP2517_*, relay*Pin, ledPin, accPin, BLUE/GOLD_BUTTON_PIN
+// are all defined in the board_configs/BoardPins_*.h file selected above.
 
 /*
  *  This is the configuration file for the NeoPixel operation.
@@ -188,21 +164,16 @@ const uint8_t PixelPin = NeoPixel_PinA;  // pin for the data line, ignored for E
 #define IndexLightIn  NUM_TABLE_EVENTS + NUM_TRACK_EVENTS + NUM_DOOR_EVENTS + 1   // Light events  PEID(eidInterior) OpenLcb.produce(IndexLightIn);
 #define IndexLightEx IndexLightIn + 1 // PEID(eidExterior) OpenLcb.produce(IndexLightEx);
 
-const uint8_t relay1Pin = 25;                        // Control pin for relay 1.
-const uint8_t relay2Pin = 25;                        // Control pin for relay 2.
-const uint8_t ledPin = 25;                           // Pin for LED output.
-const uint8_t accPin = 25;                           // Pin for accessory output.
+// relay1Pin, relay2Pin, ledPin, accPin — defined in board_configs/BoardPins_*.h
 
 /*
  *  This is the configuration file for LCC Turntable.
  */
 
-// TFT Screen pixel resolution in landscape orientation, change these to suit your display
-// Defined in landscape orientation !
-#define HRES 800
-#define VRES 480
-#define ROTATION 3  // rotation for screen
-#define TOUCH_ROTATION 0  // rotation for touch
+// TFT Screen pixel resolution in landscape orientation.
+// HRES, VRES, ROTATION, and TOUCH_ROTATION are defined per-board in
+// board_configs/BoardPins_*.h so that different display panels are handled
+// correctly without editing this file.
 #define DEBOUNCE_TOUCH 40
 #define DEBOUNCE_BOX 80
 

@@ -53,8 +53,13 @@
  * The local AccelStepper copy in src/application_drivers/ contains
  * modifications — do not replace with the stock Arduino library version.
  *
- * Pin assignments are in BoardSettings.h.
+ * Pin assignments are in BoardSettings.h / board_configs/BoardPins_*.h.
  */
+
+// Board and display driver selection is in ProjectConfig.h — edit that file
+// to switch boards or display drivers.  Defines set here are only visible to
+// the .ino translation unit; ProjectConfig.h propagates them to all .cpp files.
+
 #include "Arduino.h"
 #include <Wire.h>
 #include <LibPrintf.h>
@@ -75,13 +80,13 @@
 #include "src/openlcb/openlcb_application_broadcast_time.h"
 
 #include "TTvariables.h"
-#include <TFT_eSPI.h>      // Hardware-specific library
+// Display driver selected by board config — included via DisplayDriver.h / UserInterface.h
 // Include local files
 #include "Turntable.h"
 #include "src/application_drivers/AccelStepper.h"
 #include "UserInterface.h"
 
-#define NODE_ID 0x050101019411      // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
+#define NODE_ID 0x050101019419      // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
 
 
 ////// DECLARATIONS
@@ -263,6 +268,17 @@ void _register_consumers(void) {
   index++;
 
 
+  // Register the bridge track (track 0) RailCom detector event range if configured.
+  // Track 0 has no LCC command events (homing is handled by the Rehome consumer above),
+  // but it may have a DCC detector on the bridge itself.
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+  if (ConfigMemHelper_config_data.attributes.tracks[0].RailCom != 0) {
+    OpenLcbApplication_register_consumer_range(OpenLcbUserConfig_node_id,
+        swap_endian64(ConfigMemHelper_config_data.attributes.tracks[0].RailCom),
+        EVENT_RANGE_COUNT_32768);
+  }
+#endif
+
   // Register consumer events for usable tracks 1 through TrackCount.
   // Track 0 is the homing-sensor position; it has no LCC command events — homing
   // is handled by the dedicated Rehome consumer registered above.
@@ -429,10 +445,15 @@ void setup1() {
   }
   else {
     drawHomePage();
+#if !defined(DISPLAY_DRIVER_RA8876_NATIVE)
+    // TFT_eSPI modes: draw tracks over the initial bridge on the single framebuffer.
+    // For RA8876_NATIVE, drawTurnTable() already placed tracks on Layer 0 and left
+    // Layer 1 as the active canvas — calling drawTracks() here would land on Layer 1.
     drawTracks();
+#endif
     homed = 0;
     initiateHoming();
-  }  
+  }
   Serial.println("Loop 1 started \n");
 }
 
@@ -493,7 +514,19 @@ void loop() {
   OpenLcbConfig_run();
 
   touchIO();    // process touch input
-  
+
+  // Redraw bridge whenever the stepper has moved ≥ 1° since the last frame.
+  // For RA8876_NATIVE this only touches Layer 1; tracks on Layer 0 are untouched.
+  // For TFT_eSPI modes the function also calls drawTracks() to restore track lines
+  // erased by the fillCircle erase in drawBridge().
+  updateBridgeAnimation();
+
+  // Drain all display dirty flags set by event callbacks (door state, track
+  // occupancy, RailCom addresses, bridge power state, etc.).  Runs after
+  // updateBridgeAnimation() so a simultaneous bridge + track update on
+  // TFT_eSPI modes is handled by the bridge path covering both in one pass.
+  updateDisplay();
+
 }
 
 // ==== Loop Two for node function processes ==========================
@@ -515,11 +548,13 @@ void loop1() {
     #if defined(DISABLE_OUTPUTS_IDLE)   // If disabling on idle is enabled, disable the stepper.
       if (isStepperRunning() != lastRunningState) {
         lastRunningState = isStepperRunning();
-        if (!lastRunningState) { 
+        if (!lastRunningState) {
           disableStepper();
-          if ((activeScreen == 1) && (fullTurnSteps != 0)) {
-            drawBridge(absPosition(getCurrentPosition())*360/fullTurnSteps);
-          }
+          // NOTE: do NOT call drawBridge() here — this is Core 1 and the display
+          // SPI bus is owned by Core 0.  Calling drawBridge() from loop1() causes
+          // a two-core SPI collision (confirmed via serial bisection).
+          // updateBridgeAnimation() on Core 0 redraws the bridge at the stopped
+          // position within one loop() iteration, so no separate call is needed.
         }
       }
     #endif

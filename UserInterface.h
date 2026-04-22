@@ -26,12 +26,8 @@
 // #include "EEPROMFunctions.h"
 #include "version.h"
 
-#include <SPI.h>    // Call up the TFT driver library
-#include <TFT_eSPI.h>      // Hardware-specific library
-// #include <bb_captouch.h>
-// #include "TAMC_GT911.h"
+#include "DisplayDriver.h"   // selects TFT_eSPI or RA8876_RP2040 wrapper
 #include "src/application_drivers/my_bb_captouch.h"
-//#include <SPI.h> // Not needed when using I2C
 
 
 void setupDisplay();
@@ -70,5 +66,41 @@ void TogglePixels();
 void DimmerHigh();
 void DimmerLow();
 void ScreenPrint(String text, int col, int row, int size);
+void updateBridgeAnimation();
+
+// ===========================================================================
+//  Display dirty flags
+//
+//  Rather than redrawing immediately inside event callbacks, callers set one
+//  or more of these flags.  updateDisplay() drains them once per loop()
+//  iteration, coalescing rapid bursts (e.g. login-time door-state sync) into
+//  a single draw pass and keeping event callbacks fast.
+//
+//  Categories
+//    DISP_DIRTY_TRACKS  one or more radial track lines (home page, screen 1)
+//    DISP_DIRTY_BRIDGE  bridge interior — power-state rails or centre loco
+//    DISP_DIRTY_DOORS   one or more door buttons  (button page, screen 2)
+//
+//  Per-element masks
+//    _track_dirty_mask  bit n set → drawTrack(n) pending
+//    _door_dirty_mask   bit n set → drawDoorButton(n) pending
+// ===========================================================================
+#define DISP_DIRTY_NONE    0x00
+#define DISP_DIRTY_TRACKS  0x01
+#define DISP_DIRTY_BRIDGE  0x02
+#define DISP_DIRTY_DOORS   0x04
+
+extern bool              _displayOK;            // true only if tft.init() succeeded
+extern volatile uint8_t  _display_dirty_flags;
+extern volatile uint32_t _track_dirty_mask;
+extern volatile uint32_t _door_dirty_mask;
+
+// Setters — call instead of drawing directly inside callbacks
+void markTrackDirty(int track);   // DISP_DIRTY_TRACKS + bit in _track_dirty_mask
+void markDoorDirty(int track);    // DISP_DIRTY_DOORS  + bit in _door_dirty_mask
+void markBridgeDirty();           // DISP_DIRTY_BRIDGE
+
+// Drain all dirty flags — call once per loop() iteration after updateBridgeAnimation()
+void updateDisplay();
 
 #endif

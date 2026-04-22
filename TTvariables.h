@@ -5,8 +5,7 @@
 
 #include "BoardSettings.h"
 
-#include <SPI.h>
-#include <TFT_eSPI.h>
+#include "DisplayDriver.h"  // selects display library; also pulls in <SPI.h>
 // #include <TFT_Touch.h>
 #include "src/application_drivers/my_bb_captouch.h"
 // #include "TAMC_GT911.h"

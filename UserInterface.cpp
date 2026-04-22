@@ -19,12 +19,17 @@
 #include "UserInterface.h"
 #include "BoardSettings.h"
 #include "TTvariables.h"
+// RA8876Registers.h (pulled in above via UserInterface.h → DisplayDriver.h)
+// defines RED/GREEN/BLUE as RGB565 color values.  NeoPixelConnect.h redefines
+// them as channel indices (0, 1, 2).  Undef first to suppress the warning.
+// Display code uses TFT_RED / TFT_GREEN / TFT_BLUE, not these bare names,
+// so the RA8876 definitions are not needed in this translation unit.
+#undef RED
+#undef GREEN
+#undef BLUE
 #include <NeoPixelConnect.h>
 
-#include <SPI.h>    // Call up the TFT driver library
-#include <TFT_eSPI.h>      // Hardware-specific library
-// #include <TFT_Touch.h>    // Call up touch screen library
-// #include <bb_captouch.h>
+#include "DisplayDriver.h"   // selects TFT_eSPI or RA8876_RP2040 wrapper
 #include "src/application_drivers/my_bb_captouch.h"
 #include <cstring>
 #include "mdebugging.h"
@@ -83,6 +88,7 @@ uint32_t _db_time = DEBOUNCE_TOUCH;	// Debounce time (ms).
 NeoPixelConnect strip(PixelPin, PixelCount, NeoPixel_PIO, 0);
 
 bool pixelsOn = false;
+bool _displayOK = false;   // set true only if tft.init() succeeds
 int activeScreen = 0;
 int editTrack = 0;
 int editServo = 0;
@@ -98,8 +104,29 @@ unsigned long gearingFactor = STEPPER_GEARING_FACTOR;
 
 HotBox HotBoxes[PossibleBoxes];
 
-// Invoke custom TFT driver library
-TFT_eSPI tft = TFT_eSPI(); // Invoke custom library
+// Display object — type is TFT_eSPI or TT_Display depending on DISPLAY_DRIVER_*
+DISPLAY_DECLARE_TFT;
+
+// ---------------------------------------------------------------------------
+//  Display dirty flags — see UserInterface.h for full description
+// ---------------------------------------------------------------------------
+volatile uint8_t  _display_dirty_flags = DISP_DIRTY_NONE;
+volatile uint32_t _track_dirty_mask    = 0;
+volatile uint32_t _door_dirty_mask     = 0;
+
+void markTrackDirty(int track) {
+    if (track < 1 || track >= MAX_TRACKS) return;
+    _track_dirty_mask    |= (1UL << track);
+    _display_dirty_flags |= DISP_DIRTY_TRACKS;
+}
+void markDoorDirty(int track) {
+    if (track < 1 || track >= MAX_TRACKS) return;
+    _door_dirty_mask     |= (1UL << track);
+    _display_dirty_flags |= DISP_DIRTY_DOORS;
+}
+void markBridgeDirty() {
+    _display_dirty_flags |= DISP_DIRTY_BRIDGE;
+}
 
 extern bool isStepperRunning();
 extern long getCurrentPosition();
@@ -161,29 +188,17 @@ void TurntableCallback(uint16_t callin) {
         MoveToTrack(track,32);
         break;
       case 2:
-        // track occupancy toggle, just redraw track with new occupancy state
-        // TODO: set track occupancy state from new consumer_status[] slot that the CDI updates on occupancy events, rather than just toggling blindly on every occupancy event received.  This will ensure the display reflects actual track state even if an occupancy event is lost or received out of order.
-        // if (fullTurnSteps != 0) {
-        //   drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
-        // }
+        // Occupancy consumer_status was updated by the LCB stack before this
+        // callback fired.  Mark dirty so updateDisplay() redraws the rail
+        // colour (UNKNOWN=brown, SET=red/occupied, CLEAR=green/unoccupied).
+        markTrackDirty(track);
         break;
-      // case 3:
-        // track railcom toggle, just redraw track with new railcom state
-        // if (fullTurnSteps != 0) {
-        //   drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
-        // }
-        // break;
-    }      
-      // toggle door to track w/redraw
-      if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
-      {
-        // if (Servos[ConfigMemHelper_config_data.Tracks[track].servoNumber].Status)
-        // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            }
-        // else
-        // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            }
-        if (fullTurnSteps != 0) {
-          drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
-        }
+    }
+      // Door-present tracks: the track-line door indicator and the door button
+      // on the button page both need to reflect any state change.
+      if (ConfigMemHelper_config_data.Tracks[track].doorPresent) {
+        markTrackDirty(track);   // door indicator on the radial track line (screen 1)
+        markDoorDirty(track);    // door button on the button page (screen 2)
       }
   }
   else {
@@ -195,6 +210,7 @@ void TurntableCallback(uint16_t callin) {
         switch (index) {
           case 0:  // CEID(eidBridge) – toggle bridge lights
             touchCommand(2);
+            markBridgeDirty();  // rail colour in bridge interior reflects new consumer_status
             break;
           case 1:  // CEID(eidHighLuminosity_On)
             DimmerHigh();
@@ -221,16 +237,12 @@ void TurntableCallback(uint16_t callin) {
       if (doorIdx >= 0 && doorIdx < ConfigMemHelper_config_data.attributes.DoorCount) {
         // Mirror Roundhouse producer state into the Turntable's producer_status[] slot
         ConfigMemHelper_config_data.producer_status[2 + doorIdx] = ConfigMemHelper_config_data.consumer_status[callin];
-        // Redraw every track whose door indicator belongs to this servo
+        // Mark every track whose door indicator belongs to this servo dirty.
+        // updateDisplay() will pick the right draw call for the active screen.
         for (int t = 1; t <= ConfigMemHelper_config_data.attributes.TrackCount; t++) {
           if (ConfigMemHelper_config_data.Tracks[t].doorPresent && ConfigMemHelper_config_data.Tracks[t].servoNumber == doorIdx) {
-            if (activeScreen == 1 && fullTurnSteps != 0) {
-              // Home page: radial track line
-              drawTrack(t, ((ConfigMemHelper_config_data.Tracks[t].trackFront * 360) / fullTurnSteps));
-            } else if (activeScreen == 2) {
-              // Button page: coloured door button
-              drawDoorButton(t);
-            }
+            markTrackDirty(t);   // door indicator on the radial track line (screen 1)
+            markDoorDirty(t);    // door button on the button page (screen 2)
           }
         }
       }
@@ -240,38 +252,85 @@ void TurntableCallback(uint16_t callin) {
 
 
 void setupDisplay()
-{  
+{
+#if defined(DISPLAY_DRIVER_RA8876_TFTESPI)
+  // SPI1 pin mapping must be configured before TFT_eSPI_RA8876 calls begin().
+  // The TFT_eSPI library reads USER_SETUP pin defines at compile time, but
+  // the RP2040 hardware SPI mux must also be set at runtime on Philhower core.
+  Serial.println(F("DIAG: configuring SPI1 pins"));
+  Serial.flush();
+  // DISPLAY_SDI = GPIO8  = SPI1 RX (MISO from RP2040 perspective)
+  // DISPLAY_SDO = GPIO11 = SPI1 TX (MOSI from RP2040 perspective)
+  // Philhower panics if setTX/setRX is called with a pin whose hardware
+  // function doesn't match — so these must not be swapped.
+  SPI1.setRX(DISPLAY_SDI);   // GPIO8,  SPI1 RX
+  SPI1.setTX(DISPLAY_SDO);   // GPIO11, SPI1 TX
+  SPI1.setSCK(DISPLAY_SCK);  // GPIO10, SPI1 SCK
+  // Note: do NOT call SPI1.setCS() here — TFT_eSPI manages CS as a GPIO;
+  // assigning it as a hardware-CS pin can prevent TFT_eSPI from driving it.
+  SPI1.begin();
+  Serial.println(F("DIAG: SPI1.begin() done"));
+  Serial.flush();
+#endif
+
+  Serial.println(F("DIAG: calling tft.init()"));
+  Serial.flush();
+#if defined(DISPLAY_DRIVER_RA8876_NATIVE)
+  // Native wrapper: init() returns bool — fail fast if chip doesn't respond.
+  _displayOK = tft.init();
+  if (!_displayOK) {
+    Serial.println(F("ERROR: tft.init() failed — display not responding. "
+                     "Check wiring and power. Display features disabled."));
+    Serial.flush();
+    // Touch controller is on the same board; skip it too.
+    return;
+  }
+  Serial.println(F("DIAG: tft.init() returned OK"));
+#else
+  // TFT_eSPI modes: init() is void — hangs if chip absent, succeeds otherwise.
   tft.init();
-  tft.setRotation(ROTATION);   // Set TFT the screen to landscape orientation
+  _displayOK = true;
+  Serial.println(F("DIAG: tft.init() returned"));
+#endif
+  Serial.flush();
+
+  tft.setRotation(ROTATION);
+  Serial.println(F("DIAG: setRotation done"));
+  Serial.flush();
+
   tft.fillScreen(TFT_BLACK);
-  tft.setTextDatum(TC_DATUM);  // Set text plotting reference datum to Top Centre (TC)
-  tft.setTextColor(TFT_WHITE, TFT_BLACK); // Set text to white on black
+  Serial.println(F("DIAG: fillScreen done"));
+  Serial.flush();
+
+  tft.setTextDatum(TC_DATUM);
+  tft.setTextColor(TFT_WHITE, TFT_BLACK);
 
   // calibration values from prior run of the display calibration library example
 // touch.setCal(3668, 365, 3422, 258, 480, 320, 1);
 // touch.setCal(3671, 356, 3459, 297, 480, 320, 1);
 
-  // tp.init(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_INT);
-  // int iType = tp.sensorType();
-  // Serial.printf("Sensor type = %s\n", szNames[iType]);
-
+  Serial.println(F("DIAG: calling tp.init()"));
+  Serial.flush();
   tp.init(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_INT, 400000, &TOUCH_WIRE);
   int iType = tp.sensorType();
   Serial.printf("Sensor type = %s\n", szNames[iType]);
+  Serial.flush();
 
   Serial.println("bb_captouch Touch: Ready");
   // tp.begin();
-  
-    // int setOrientation(int iOrientation, int iWidth, int iHeight);
+
   int result = tp.setOrientation(TOUCH_ROTATION, HRES, VRES);
+  Serial.printf("DIAG: tp.setOrientation result = %d\n", result);
+  Serial.flush();
 
   // pinMode(TFT_BL, OUTPUT);    // lcd light
   // digitalWrite(TFT_BL, LOW);
   // digitalWrite(TFT_BL, HIGH);
 
-  Serial.println(F("Setup Display"));  
+  Serial.println(F("Setup Display"));
+  Serial.flush();
   tft.setCursor(0, 0, 4);
-  tft.println(F("LCC Turntable Control"));  
+  tft.println(F("LCC Turntable Control"));
   tft.setCursor(50, 50, 2);
   tft.println("");
   tft.print(F("Version "));
@@ -372,6 +431,11 @@ void drawFastClock(int hour, int minute)
     TimeText+= minute;
     char buffer[30];
     TimeText.toCharArray(buffer,30);
+    {
+      int ty = (VRES/2)-30;
+      int fh = tft.fontHeight(4);
+      tft.fillRect(5, ty - fh/2, tft.textWidth("Fast Clock: 00:00", 4) + 10, fh, TFT_BLACK);
+    }
     tft.drawString(buffer, 5, (VRES/2)-30, 4);
 
     // tft.setCursor(HRES/8, (VRES/2)-30);
@@ -399,7 +463,10 @@ void drawFastClock(int hour, int minute)
 
 void drawHomePage()
 {
-  activeScreen = 1;
+  // NOTE: activeScreen is set to 1 only AFTER all drawing is complete.
+  // updateBridgeAnimation() in loop() (Core 0) guards on activeScreen == 1,
+  // so keeping it 0 here prevents Core 0 from calling drawBridge() while
+  // this function's GE operations are still in progress (two-core SPI race).
   /*
   main page from which to operate
   shows turntable with tracks and doors
@@ -439,6 +506,9 @@ void drawHomePage()
   setHotSpot(6, 1, row, HRES - 2, row + 23);
 
   drawTurnTable();
+
+  // All drawing complete — now allow Core 0's updateBridgeAnimation() to run.
+  activeScreen = 1;
 }
 
 
@@ -667,10 +737,26 @@ void drawTurnTable()
   fg_color = TFT_WHITE;
   bg_color = TFT_BLACK;
 
+#if defined(DISPLAY_DRIVER_RA8876_NATIVE)
+  // Layer 0: static background — ring + all track lines.
+  // Drawn once here; never erased by bridge animation.
+  tft.selectCanvas(0);
+#endif
+
   tft.fillCircle(TT_CX, TT_CY, (TT_RAD+(TT_S_SPACE*2)+TT_S_WIDTH + 5), TFT_BLACK);
-  // drawSmoothCircle(int32_t x, int32_t y, int32_t r, uint32_t fg_color, uint32_t bg_color);
-  tft.drawSmoothCircle(xC, yC, rad, fg_color,  bg_color);
-  // tft.drawCircle(xC, yC, rad+1, TFT_WHITE);
+  tft.drawSmoothCircle(xC, yC, rad, fg_color, bg_color);
+
+#if defined(DISPLAY_DRIVER_RA8876_NATIVE)
+  // Tracks go on Layer 0 so bridge animation on Layer 1 never erases them.
+  if (fullTurnSteps != 0) {
+    drawTracks();
+  }
+  // Freeze Layer 0 as the compositor's read-only background source,
+  // then switch to Layer 1 for all subsequent bridge/shack draws.
+  tft.freezeBackground();
+  tft.selectCanvas(1);
+  tft.clearCanvas();
+#endif
 
   if (fullTurnSteps != 0) {
     drawBridge((absPosition(getCurrentPosition())*360)/fullTurnSteps);
@@ -683,7 +769,14 @@ void drawBridge(float angle)
   angle = angle + TT_ROTATION - 180;
 
 int32_t xC = TT_CX, yC = TT_CY, offset = TT_B_WIDTH, side = TT_B_WIDTH*2;
-tft.fillCircle(TT_CX, TT_CY, (TT_RAD-2), TFT_BLACK);
+#if defined(DISPLAY_DRIVER_RA8876_NATIVE)
+  // BTE-wipe Layer 1 only — Layer 0 tracks/ring are untouched.
+  tft.clearCanvas();
+#else
+  // TFT_eSPI modes: erase the bridge circle area on the single framebuffer.
+  // Callers that want tracks preserved must call drawTracks() after drawBridge().
+  tft.fillCircle(TT_CX, TT_CY, (TT_RAD-2), TFT_BLACK);
+#endif
 
 float length = TT_DIA - 25, width = TT_B_WIDTH;
 float CosAngle = - cos(angle*0.01745329252);
@@ -707,8 +800,8 @@ setHotSpot8(1,BPt1X, BPt1Y, BPt2X, BPt2Y,BPt3X, BPt3Y, BPt4X, BPt4Y);
 // If bg_color is not included the background pixel colour will be read from TFT or sprite
 //tft.drawWideLine(float ax, float ay, float bx, float by, float wd, uint32_t fg_color, uint32_t bg_color = 0x00FFFFFF);
 // draw bridge ends
-tft.drawWideLine(BPt1X, BPt1Y, BPt2X, BPt2Y, 8, TFT_BLUE);
-tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 8, TFT_YELLOW);
+tft.drawWideLine(BPt1X, BPt1Y, BPt2X, BPt2Y, 8, TFT_BLUE,   TFT_BLACK);
+tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 8, TFT_YELLOW, TFT_BLACK);
 // draw bridge section
 length = TT_DIA - 40;
  CPtBackX = xC - (CosAngle * length / 2);
@@ -727,18 +820,18 @@ length = TT_DIA - 40;
  switch (ConfigMemHelper_config_data.consumer_status[NUM_EVENT])
  {
     case EVENT_STATUS_UNKNOWN:
-      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, RailColor);
-      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, RailColor);
+      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, RailColor, TFT_BLACK);
+      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, RailColor, TFT_BLACK);
       break;
 
     case EVENT_STATUS_SET:
-      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, TFT_RED);
-      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, TFT_RED);
+      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, TFT_RED,   TFT_BLACK);
+      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, TFT_RED,   TFT_BLACK);
       break;
 
     case EVENT_STATUS_CLEAR:
-      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, TFT_GREEN);
-      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, TFT_GREEN);
+      tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 4, TFT_GREEN, TFT_BLACK);
+      tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 4, TFT_GREEN, TFT_BLACK);
       break;
   }
 
@@ -753,7 +846,7 @@ char buf[20];
   } else {
       sprintf(buf, "---");  // track empty
   }
-  tft.setTextDatum(MC_DATUM);  // Set text plotting reference datum to Middle Center 
+  tft.setTextDatum(MC_DATUM);  // Set text plotting reference datum to Middle Center
   tft.setTextPadding(tft.textWidth("999999999", 2)); // get the width of the text in pixels
   tft.drawString(buf, xC, yC, 2);  // draw the known loco on the track if occupied, or "---" if empty
 
@@ -782,10 +875,9 @@ float SPt3Y = CPtShackY + (SineAngle * side);
 setHotSpot8(2,CPtShackX, CPtShackY, SPt1X, SPt1Y,SPt2X, SPt2Y, SPt3X, SPt3Y);
 
 
-tft.setTextDatum(ML_DATUM);  // Set text plotting reference datum to Middle Left 
+tft.setTextDatum(ML_DATUM);  // Set text plotting reference datum to Middle Left
 tft.setTextPadding(tft.textWidth("9999999999999999999999999", 2)); // get the width of the text in pixels
 tft.drawString(TrackName[ConfigMemHelper_config_data.CurrentTrack], 80, VRES/2, 2);  // draw the name of the track
-
 }
 
 void drawShack(float angle)
@@ -811,10 +903,10 @@ float SPt3X = CPtShackX + (CosAngle * side);
 float SPt3Y = CPtShackY + (SineAngle * side);
  
 // draw bridge shack
-tft.drawWideLine(CPtShackX, CPtShackY, SPt1X, SPt1Y, 2, TFT_RED);
-tft.drawWideLine(SPt1X, SPt1Y, SPt2X, SPt2Y, 2, TFT_RED);
-tft.drawWideLine(SPt2X, SPt2Y, SPt3X, SPt3Y, 2, TFT_RED);
-tft.drawWideLine(SPt3X,SPt3Y,CPtShackX, CPtShackY, 2, TFT_RED);
+tft.drawWideLine(CPtShackX, CPtShackY, SPt1X, SPt1Y, 2, TFT_RED, TFT_BLACK);
+tft.drawWideLine(SPt1X, SPt1Y, SPt2X, SPt2Y, 2, TFT_RED, TFT_BLACK);
+tft.drawWideLine(SPt2X, SPt2Y, SPt3X, SPt3Y, 2, TFT_RED, TFT_BLACK);
+tft.drawWideLine(SPt3X, SPt3Y, CPtShackX, CPtShackY, 2, TFT_RED, TFT_BLACK);
 if (pixelsOn) 
   tft.fillCircle((SPt1X+SPt3X)/2, (SPt1Y+SPt3Y)/2, TT_B_WIDTH/2, TFT_YELLOW);
   else
@@ -872,18 +964,18 @@ void drawTrack(int track, float angle)
   switch (ConfigMemHelper_config_data.consumer_status[NUM_TABLE_EVENTS + (track-1)*3 + 2])
   {
       case EVENT_STATUS_UNKNOWN:
-        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, RailColor);
-        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, RailColor);
+        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, RailColor, TFT_BLACK);
+        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, RailColor, TFT_BLACK);
         break;
 
       case EVENT_STATUS_SET:
-        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, TFT_RED);
-        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, TFT_RED);
+        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, TFT_RED,   TFT_BLACK);
+        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, TFT_RED,   TFT_BLACK);
         break;
 
       case EVENT_STATUS_CLEAR:
-        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, TFT_GREEN);
-        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, TFT_GREEN);
+        tft.drawWideLine(BPt2X, BPt2Y, BPt3X, BPt3Y, 2, TFT_GREEN, TFT_BLACK);
+        tft.drawWideLine(BPt4X, BPt4Y, BPt1X, BPt1Y, 2, TFT_GREEN, TFT_BLACK);
         break;
     }
 
@@ -906,7 +998,7 @@ void drawTrack(int track, float angle)
   BPt3Y = CPtFrontY + (CosAngle * width / 2);
   BPt4X = CPtFrontX + (SineAngle * width / 2);
   BPt4Y = CPtFrontY - (CosAngle * width / 2);
-  tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_BLUE);
+  tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_BLUE, TFT_BLACK);
   setHotSpot8(box, BPt3X, BPt3Y, BPt4X, BPt4Y, BPt3X, BPt3Y, BPt4X, BPt4Y);
 
   // back position button (yellow)
@@ -918,7 +1010,7 @@ void drawTrack(int track, float angle)
   BPt3Y = CPtFrontY + (CosAngle * width / 2);
   BPt4X = CPtFrontX + (SineAngle * width / 2);
   BPt4Y = CPtFrontY - (CosAngle * width / 2);
-  tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_YELLOW);
+  tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_YELLOW, TFT_BLACK);
   setHotSpot8(box+1, BPt3X, BPt3Y, BPt4X, BPt4Y, BPt3X, BPt3Y, BPt4X, BPt4Y);
 
   // door position button (state determined)
@@ -952,15 +1044,15 @@ void drawTrack(int track, float angle)
     switch (ConfigMemHelper_config_data.producer_status[2+ConfigMemHelper_config_data.Tracks[track].servoNumber]) {
 
       case EVENT_STATUS_UNKNOWN:
-        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_YELLOW);
+        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_YELLOW, TFT_BLACK);
         break;
 
       case EVENT_STATUS_SET:
-        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_RED);
+        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_RED,    TFT_BLACK);
         break;
 
       case EVENT_STATUS_CLEAR:
-        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_GREEN);
+        tft.drawWideLine(BPt3X, BPt3Y, BPt4X, BPt4Y, 9, TFT_GREEN,  TFT_BLACK);
         break;
     }
     
@@ -1070,6 +1162,8 @@ void setHotSpot8(int box, int X1, int Y1, int X2, int Y2, int X3, int Y3, int X4
 
 void touchIO()
 {
+  if (!_displayOK) return;   // touch controller not initialised; skip
+
   // tp.read();
   if (tp.getSamples(&ti)) // Note this function updates coordinates stored within library variables
   {
@@ -1154,25 +1248,28 @@ void rotatePoints(int x, int y)
 }
 int HotSpotBox(int X, int Y)
 {int retcode = 0;
-          Serial.print("  x: ");Serial.print(X);
-          Serial.print("  y: ");Serial.print(Y);
-          Serial.println(' ');           
+  Serial.print("  x: ");Serial.print(X);
+  Serial.print("  y: ");Serial.print(Y);
+  Serial.print("  activeScreen: ");Serial.println(activeScreen);
+  Serial.print("  box13 scr:");Serial.print(HotBoxes[13].screen);
+  Serial.print(" x1:");Serial.print(HotBoxes[13].X1);
+  Serial.print(" y1:");Serial.print(HotBoxes[13].Y1);
+  Serial.print(" x2:");Serial.print(HotBoxes[13].X2);
+  Serial.print(" y2:");Serial.println(HotBoxes[13].Y2);
   if ((X>0) && (Y>0)) {
     for (int i = 0; i < (sizeof(HotBoxes) / sizeof(HotBox)); i++) {
       if ((HotBoxes[i].screen == activeScreen) && (HotBoxes[i].X1 <= X) && (X <= HotBoxes[i].X2) && (HotBoxes[i].Y1 <= Y) && (Y <= HotBoxes[i].Y2 ))
       {
         retcode = i;
-        #ifdef TT2_DEBUG             
-          Serial.print("Box ");Serial.print(i);Serial.print(" screen: ");Serial.print(HotBoxes[i].screen);
-          Serial.print("  x1: ");Serial.print(HotBoxes[i].X1);
-          Serial.print("  y1: ");Serial.print(HotBoxes[i].Y1);
-          Serial.print("  x2: ");Serial.print(HotBoxes[i].X2);
-          Serial.print("  y2: ");Serial.print(HotBoxes[i].Y2);
-          Serial.println(' ');  
-        #endif 
+        Serial.print("Match box ");Serial.print(i);Serial.print(" screen: ");Serial.print(HotBoxes[i].screen);
+        Serial.print("  x1: ");Serial.print(HotBoxes[i].X1);
+        Serial.print("  y1: ");Serial.print(HotBoxes[i].Y1);
+        Serial.print("  x2: ");Serial.print(HotBoxes[i].X2);
+        Serial.print("  y2: ");Serial.println(HotBoxes[i].Y2);
       }
     }
   }
+  Serial.print("  box: ");Serial.println(retcode);
   return retcode;
 }
 
@@ -1239,4 +1336,188 @@ void ScreenPrint(String text, int col, int row, int size)
   tft.setTextDatum(TL_DATUM); // Top Left is datum
   tft.setCursor(col, row, size);
   tft.print(text);
+}
+
+// ===========================================================================
+//  updateBridgeAnimation — called from loop() (Core 0) every iteration.
+//
+//  Redraws the bridge whenever the stepper has moved ≥ 1° since the last
+//  draw.  The 1° threshold prevents redundant redraws while still providing
+//  smooth animation at typical stepper speeds.
+//
+//  RA8876_NATIVE:  drawBridge() clears Layer 1 only; track lines on Layer 0
+//                  are hardware-composited and never touched.
+//
+//  TFT_eSPI modes: drawBridge() erases the TT interior with fillCircle, so
+//                  drawTracks() is called immediately after to restore the
+//                  track lines.  This adds ~N×3 drawWideLine calls per frame
+//                  (N = track count) but is unavoidable without layer support.
+// ===========================================================================
+void updateBridgeAnimation()
+{
+  static float _lastAnimAngleDeg = -999.0f;  // angle at last redraw (-999 = never drawn)
+
+  // Only run on the home page and when the step count is known
+  if (activeScreen != 1 || fullTurnSteps == 0) {
+    _lastAnimAngleDeg = -999.0f;  // force a full redraw next time we enter screen 1
+    return;
+  }
+
+  // Current bridge angle in degrees [0, 360)
+  float currentAngleDeg = (float)(absPosition(getCurrentPosition()) * 360)
+                          / (float)fullTurnSteps;
+
+  // Redraw threshold: 1° or one step, whichever is larger
+  // (avoids divide-by-zero and sub-1° jitter on coarse-geared systems)
+  float degPerStep = 360.0f / (float)fullTurnSteps;
+  float threshold  = (degPerStep > 1.0f) ? degPerStep : 1.0f;
+
+  // Shortest-path angular delta so we handle the 0°/360° wrap correctly
+  float delta = currentAngleDeg - _lastAnimAngleDeg;
+  if (delta >  180.0f) delta -= 360.0f;
+  if (delta < -180.0f) delta += 360.0f;
+
+  if (fabsf(delta) < threshold) {
+    return;   // not enough movement yet — nothing to do
+  }
+
+  _lastAnimAngleDeg = currentAngleDeg;
+
+  // Redraw bridge (and shack) at the new angle
+  drawBridge(currentAngleDeg);
+
+#if !defined(DISPLAY_DRIVER_RA8876_NATIVE)
+  // TFT_eSPI modes: drawBridge() erased the interior; restore track lines.
+  drawTracks();
+#endif
+}
+
+// ===========================================================================
+//  updateDisplay — drain all display dirty flags (call once per loop())
+//
+//  All event callbacks mark data dirty instead of drawing immediately.
+//  This function services those marks in a single, ordered pass:
+//
+//  1. RailCom: translate _RailCom[].dirty into per-category marks.
+//  2. Home page (screen 1):
+//       BRIDGE — redraw bridge interior (power-state rails + centre loco).
+//                TFT_eSPI: bridge fillCircle erases tracks; drawTracks()
+//                follows to restore them (also satisfies TRACKS flag).
+//                RA8876_NATIVE: clearCanvas() on Layer 1 only; Layer 0
+//                tracks are untouched by hardware compositing.
+//       TRACKS — redraw only the individually dirty track lines.
+//                RA8876_NATIVE: canvas is switched to Layer 0 for the draw
+//                then restored to Layer 1 for bridge animation.
+//  3. Button page (screen 2):
+//       DOORS  — redraw the dirty door buttons.
+//  4. Other screens — discard all pending flags.
+// ===========================================================================
+void updateDisplay()
+{
+  // ── 1. RailCom translation ────────────────────────────────────────────
+  // _railcom_dirty is set by _handle_railcom_event() in callbacks.cpp.
+  // RailCom[0] = turntable bridge track → shown in the bridge centre circle.
+  // RailCom[t] for t ≥ 1 → shown next to each track line.
+  if (_railcom_dirty) {
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+    if (_RailCom[0].dirty) {
+      markBridgeDirty();
+      _RailCom[0].dirty = false;
+    }
+    for (int i = 1; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
+      if (_RailCom[i].dirty) {
+        markTrackDirty(i);
+        // _RailCom[i].dirty is cleared when drawTrack() is called below
+      }
+    }
+#endif
+    _railcom_dirty = false;
+  }
+
+  // If the display didn't initialise or there is nothing pending, bail out
+  if (!_displayOK)                             return;
+  if (_display_dirty_flags == DISP_DIRTY_NONE) return;
+
+  // ── 2. Home page ──────────────────────────────────────────────────────
+  if (activeScreen == 1 && fullTurnSteps != 0) {
+
+    // --- Bridge interior -------------------------------------------------
+    // Service BRIDGE before TRACKS: on TFT_eSPI a bridge redraw also covers
+    // all tracks via drawTracks(), so the TRACKS pass can be skipped.
+    if (_display_dirty_flags & DISP_DIRTY_BRIDGE) {
+      drawBridge((absPosition(getCurrentPosition()) * 360) / fullTurnSteps);
+
+#if !defined(DISPLAY_DRIVER_RA8876_NATIVE)
+      // TFT_eSPI: bridge fillCircle erased all tracks — restore them now.
+      // This also satisfies any pending per-track dirty bits.
+      drawTracks();
+      for (int i = 1; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+        _RailCom[i].dirty = false;
+#endif
+      }
+      _track_dirty_mask    = 0;
+      _display_dirty_flags &= ~DISP_DIRTY_TRACKS;
+#endif
+      _display_dirty_flags &= ~DISP_DIRTY_BRIDGE;
+    }
+
+    // --- Individual track lines ------------------------------------------
+    // In RA8876_NATIVE mode this runs independently of the bridge path.
+    // In TFT_eSPI mode DISP_DIRTY_TRACKS was cleared above if bridge fired.
+    if (_display_dirty_flags & DISP_DIRTY_TRACKS) {
+#if defined(DISPLAY_DRIVER_RA8876_NATIVE)
+      // Tracks live on Layer 0; switch canvas, draw, restore to Layer 1
+      tft.selectCanvas(0);
+#endif
+      for (int t = 1; t <= ConfigMemHelper_config_data.attributes.TrackCount; t++) {
+        if (_track_dirty_mask & (1UL << t)) {
+          drawTrack(t, ((ConfigMemHelper_config_data.Tracks[t].trackFront * 360) / fullTurnSteps));
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+          _RailCom[t].dirty = false;
+#endif
+        }
+      }
+#if defined(DISPLAY_DRIVER_RA8876_NATIVE)
+      tft.selectCanvas(1);   // restore animation layer
+#endif
+      _track_dirty_mask    = 0;
+      _display_dirty_flags &= ~DISP_DIRTY_TRACKS;
+    }
+
+    // Discard door flags — not visible on screen 1
+    _door_dirty_mask     = 0;
+    _display_dirty_flags &= ~DISP_DIRTY_DOORS;
+  }
+
+  // ── 3. Button page ────────────────────────────────────────────────────
+  else if (activeScreen == 2) {
+
+    if (_display_dirty_flags & DISP_DIRTY_DOORS) {
+      for (int t = 1; t <= ConfigMemHelper_config_data.attributes.TrackCount; t++) {
+        if ((_door_dirty_mask & (1UL << t)) &&
+            ConfigMemHelper_config_data.Tracks[t].doorPresent) {
+          drawDoorButton(t);
+        }
+      }
+      _door_dirty_mask     = 0;
+      _display_dirty_flags &= ~DISP_DIRTY_DOORS;
+    }
+
+    // Discard track/bridge flags — not visible on screen 2
+    _track_dirty_mask    = 0;
+    _display_dirty_flags &= ~(DISP_DIRTY_TRACKS | DISP_DIRTY_BRIDGE);
+  }
+
+  // ── 4. Other screens — discard everything ─────────────────────────────
+  else {
+    _display_dirty_flags = DISP_DIRTY_NONE;
+    _track_dirty_mask    = 0;
+    _door_dirty_mask     = 0;
+#ifdef OPENLCB_COMPILE_DCC_DETECTOR
+    for (int i = 0; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
+      _RailCom[i].dirty = false;
+    }
+#endif
+  }
 }
