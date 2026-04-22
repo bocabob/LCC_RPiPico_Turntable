@@ -493,7 +493,8 @@ void loop() {
   OpenLcbConfig_run();
 
   touchIO();    // process touch input
-  
+  updateDirtyDisplay();  // flush any display flags set by Core 1
+
 }
 
 // ==== Loop Two for node function processes ==========================

@@ -607,11 +607,8 @@ void calibration() {
         Serial.println(ConfigMemHelper_config_data.attributes.ReferenceCount);
         calibrationPhase = 0;
         calibrating = false;
-        if (activeScreen == 1) {
-          displayConfig();
-          drawTurnTable();
-          drawTracks();
-        }
+        displayConfig();   // Serial-only, safe from Core 1
+        markBridgeDirty(); // Core 0 will call drawTurnTable() + drawTracks()
         ConfigMemHelper_write(OpenLcbUserConfig_node_id, &ConfigMemHelper_config_data);
         // writeEEPROM();
       } else { // reference point found, log it

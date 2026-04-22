@@ -34,6 +34,16 @@
 //#include <SPI.h> // Not needed when using I2C
 
 
+// Dirty flags — set from Core 1, cleared and acted on by Core 0's updateDirtyDisplay()
+#define DISP_DIRTY_BRIDGE  0x01   // needs drawTurnTable() + drawTracks()
+#define DISP_DIRTY_TRACKS  0x02   // needs drawTracks() only
+
+extern volatile uint8_t _display_dirty_flags;
+
+void markBridgeDirty();
+void markAllTracksDirty();
+void updateDirtyDisplay();
+
 void setupDisplay();
 void displayConfig();
 void notice(const char *string);

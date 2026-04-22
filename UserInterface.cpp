@@ -40,6 +40,24 @@ extern config_mem_t ConfigMemHelper_config_data;
 extern railcom_info_t _RailCom[MAX_TRACKS];
 extern volatile bool _railcom_dirty;
 
+volatile uint8_t _display_dirty_flags = 0;
+
+void markBridgeDirty()    { _display_dirty_flags |= DISP_DIRTY_BRIDGE; }
+void markAllTracksDirty() { _display_dirty_flags |= DISP_DIRTY_TRACKS; }
+
+void updateDirtyDisplay() {
+  if (!_display_dirty_flags) return;
+  uint8_t flags = _display_dirty_flags;
+  _display_dirty_flags = 0;
+  if (activeScreen != 1) return;
+  if (flags & DISP_DIRTY_BRIDGE) {
+    drawTurnTable();
+    drawTracks();
+  } else if (flags & DISP_DIRTY_TRACKS) {
+    drawTracks();
+  }
+}
+
 // extern AccelStepper stepper;
 
 /*
