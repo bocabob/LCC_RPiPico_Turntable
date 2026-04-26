@@ -82,17 +82,18 @@ const uint8_t accPin    = 25;
 // --------------------------------------------
 #define HRES           1024   // landscape pixel width
 #define VRES            600   // landscape pixel height
-// Rotation conventions differ between drivers:
-//   TFT_eSPI_RA8876:   rotation 3 = landscape (matches TFT_eSPI coordinate system)
-//   RA8876_RP2040 native: rotation 3 → _portrait=true, _width=600 — WRONG for
-//     a natively-landscape panel.  Use rotation 0 (top→bottom, left→right) which
-//     keeps _width=1024, _height=600 and the correct canvas stride.
-//     If the image appears mirrored/inverted at rotation 0, try rotation 2 (180°).
-#if defined(DISPLAY_DRIVER_RA8876_NATIVE)
-  #define ROTATION        0   // RA8876 native: landscape panel, rotation 0
-#else
-  #define ROTATION        3   // TFT_eSPI: landscape = rotation 3
-#endif
+// Rotation conventions for RA8876:
+//   The TFTM101 panel is natively 1024×600 landscape. RA8876 rotation maps
+//   directly to DPCR scan-direction bits — it does NOT do a row/column swap
+//   like MIPI DCS controllers (ILI9488, ST7796, etc.).
+//
+//   Rotation 0 → DPCR=0xC0: L→R, T→B — normal landscape scan. CORRECT.
+//   Rotation 3 → DPCR=0xC8: L→R, B→T (VSCAN inverted) — image appears blank
+//     or vertically corrupted. WRONG for this panel.
+//
+//   Both TFT_eSPI_RA8876 and RA8876_RP2040 native use rotation 0.
+//   If the image appears 180°-rotated use rotation 2 (DPCR=0xD8: R→L, B→T).
+#define ROTATION  0   // both drivers: RA8876 natively-landscape panel, normal scan
 #define TOUCH_ROTATION  180   // my_bb_captouch / GT9271 orientation (180° = panel mounted inverted)
 // Touch controller: Goodix GT9271 (10-point capacitive, I2C on gp12/gp13)
 // my_bb_captouch probes GT911_ADDR1 (0x5D) / GT911_ADDR2 (0x14) and detects

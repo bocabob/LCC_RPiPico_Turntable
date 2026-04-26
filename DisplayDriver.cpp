@@ -123,7 +123,7 @@ void TT_Display::setCursor(int32_t x, int32_t y, uint8_t font) {
 // ===========================================================================
 int16_t TT_Display::textWidth(const char* str, uint8_t font) {
     if (!str) return 0;
-    return (int16_t)(strlen(str) * _fontCharWidth(font));
+    return (int16_t)(strlen(str) * (1+_fontCharWidth(font)));
 }
 
 // ===========================================================================
@@ -161,7 +161,8 @@ void TT_Display::drawString(const char* str, int32_t x, int32_t y, uint8_t font)
     _selectFont(font);
     setTextColor(_fg, _bg);
     RA8876_RP2040::setCursor(ax, ay);
-    print(str);
+    // print(str);
+    putString(ax, ay, str);
 }
 
 // ===========================================================================

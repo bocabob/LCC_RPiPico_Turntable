@@ -1,34 +1,20 @@
 /*
- * ProjectConfig.h — Board and display driver selection
+ * ProjectConfig.h — THE single file to edit when switching hardware targets.
  *
- * Edit this file to match your hardware.  It is included by BoardSettings.h
- * so every translation unit (.cpp file) sees the same defines regardless of
- * what is set in the .ino file.
+ * Step 1: Uncomment exactly ONE board line.
+ * Step 2: For v2.7, uncomment exactly ONE display driver line.
+ * Step 3: Switch User_Setup_LCC_Active.h in the TFT_eSPI_RA8876 library
+ *         to match (not needed for DISPLAY_DRIVER_RA8876_NATIVE, but keep
+ *         it set to the RA8876 SPI setup so the library compiles correctly).
  *
- * Board selection — uncomment exactly one:
- *   LCC_BOARD_STEPPER_V24  : v2.4 board, SSD1963 parallel 8-bit TFT
- *   LCC_BOARD_STEPPER_V27  : v2.7 board, RA8876 SPI TFT
- *
- * Display driver (v2.7 only) — uncomment at most one:
- *   (none)                       : TFT_eSPI_RA8876 wrapper (default)
- *   DISPLAY_DRIVER_RA8876_NATIVE : native RA8876_RP2040 library
- *                                  (enables layer compositing + BTE)
+ *  LCC_BOARD_STEPPER_V24  →  v2.4 board, SSD1963 8-bit parallel 800×480
+ *  LCC_BOARD_STEPPER_V27  →  v2.7 board, RA8876 SPI 1024×600
  */
 
-#ifndef PROJECT_CONFIG_H
-#define PROJECT_CONFIG_H
+// ---- Step 1: Board selection -----------------------------------------------
+//#define LCC_BOARD_STEPPER_V24    // v2.4 board (SSD1963 parallel)
+#define LCC_BOARD_STEPPER_V27    // v2.7 board (RA8876 SPI)
 
-// --------------------------------------------
-//  Board selection — uncomment exactly one
-// --------------------------------------------
-// #define LCC_BOARD_STEPPER_V24
-#define LCC_BOARD_STEPPER_V27
-
-// --------------------------------------------
-//  Display driver (v2.7 only) — uncomment to
-//  use native RA8876_RP2040 library instead of
-//  TFT_eSPI_RA8876 (the default).
-// --------------------------------------------
-#define DISPLAY_DRIVER_RA8876_NATIVE
-
-#endif  // PROJECT_CONFIG_H
+// ---- Step 2: v2.7 display driver (ignored for v2.4) ------------------------
+#define DISPLAY_DRIVER_RA8876_NATIVE    // native RA8876_RP2040 library (layers, BTE)
+//#define DISPLAY_DRIVER_RA8876_TFTESPI // TFT_eSPI_RA8876 library

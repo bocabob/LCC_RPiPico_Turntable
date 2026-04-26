@@ -90,6 +90,12 @@ NeoPixelConnect strip(PixelPin, PixelCount, NeoPixel_PIO, 0);
 bool pixelsOn = false;
 bool _displayOK = false;   // set true only if tft.init() succeeds
 int activeScreen = 0;
+// True while a full page redraw is executing on Core 1 (setup1 → drawHomePage etc.).
+// Core 0's updateBridgeAnimation() and updateDisplay() must not touch the GE
+// concurrently.  activeScreen is set at the START of each page function so that
+// setHotSpot() tags hotboxes with the correct screen number; this flag is the
+// actual gate that keeps Core 0 out until all GE ops are complete.
+volatile bool _display_page_drawing = false;
 int editTrack = 0;
 int editServo = 0;
 
@@ -463,17 +469,20 @@ void drawFastClock(int hour, int minute)
 
 void drawHomePage()
 {
-  // NOTE: activeScreen is set to 1 only AFTER all drawing is complete.
-  // updateBridgeAnimation() in loop() (Core 0) guards on activeScreen == 1,
-  // so keeping it 0 here prevents Core 0 from calling drawBridge() while
-  // this function's GE operations are still in progress (two-core SPI race).
+  // Set activeScreen first so setHotSpot() tags every hotbox with screen == 1.
+  // _display_page_drawing is set to true at the same time to keep Core 0's
+  // updateBridgeAnimation() / updateDisplay() from touching the GE concurrently
+  // (two-core SPI race on SPI1 → "2D ready failed").  Cleared once all drawing
+  // is complete.
+  activeScreen = 1;
+  _display_page_drawing = true;
   /*
   main page from which to operate
   shows turntable with tracks and doors
   operational buttons for main TT functions and lights
   links to configuration settings and diagnostic reports
   */
-  int butLen = 100;
+  int butLen = HRES / 8 - 10;
   int Lcol = 5;
   int Rcol = HRES - butLen - 5;
   int vSpace = 40;
@@ -507,8 +516,19 @@ void drawHomePage()
 
   drawTurnTable();
 
-  // All drawing complete — now allow Core 0's updateBridgeAnimation() to run.
-  activeScreen = 1;
+#if !defined(DISPLAY_DRIVER_RA8876_NATIVE)
+  // TFT_eSPI modes: drawBridge() (called from drawTurnTable) erases the TT
+  // interior with fillCircle().  Restore track lines here, still inside the
+  // _display_page_drawing guard, so Core 0's updateBridgeAnimation() cannot
+  // race with this Core 1 SPI1 access.  Without this guard the post-
+  // drawHomePage() drawTracks() call in setup1() runs after _display_page_drawing
+  // is cleared, allowing Core 0 to call drawBridge() simultaneously → SPI
+  // corruption → cycling partial draws + blank freeze.
+  if (fullTurnSteps != 0) drawTracks();
+#endif
+
+  // All drawing complete — release Core 0.
+  _display_page_drawing = false;
 }
 
 
@@ -516,7 +536,7 @@ void drawHomePage()
 void drawButtonPage()
 {
   activeScreen = 2;
-  int butLen = 90;
+  int butLen = HRES / 8 - 10;
   int col = 5;
   int hSpace = (HRES / 6);
   int vSpace = 40;
@@ -611,7 +631,8 @@ void drawDoorButton(int track)
 void drawDiagnosticPage()
 {
   activeScreen = 4;
-  int butLen = 90;
+  _display_page_drawing = true;
+  int butLen = HRES / 8 - 10;
   int hSpace = (HRES / 6);
   int col = 10;
   int vSpace = 40;
@@ -631,6 +652,7 @@ void drawDiagnosticPage()
   listReverences(0);
   tft.setCursor((HRES/2)+50, 0, 2);
   drawTrackMatrix((HRES/2)+50);
+  _display_page_drawing = false;
 }
 
 
@@ -1357,8 +1379,9 @@ void updateBridgeAnimation()
 {
   static float _lastAnimAngleDeg = -999.0f;  // angle at last redraw (-999 = never drawn)
 
-  // Only run on the home page and when the step count is known
-  if (activeScreen != 1 || fullTurnSteps == 0) {
+  // Only run on the home page, when the step count is known, and when no
+  // full-page redraw is in progress on Core 1 (two-core SPI1 race guard).
+  if (activeScreen != 1 || fullTurnSteps == 0 || _display_page_drawing) {
     _lastAnimAngleDeg = -999.0f;  // force a full redraw next time we enter screen 1
     return;
   }
@@ -1434,8 +1457,10 @@ void updateDisplay()
     _railcom_dirty = false;
   }
 
-  // If the display didn't initialise or there is nothing pending, bail out
+  // If the display didn't initialise, a full page redraw is in progress on
+  // Core 1, or there is nothing pending, bail out.
   if (!_displayOK)                             return;
+  if (_display_page_drawing)                   return;
   if (_display_dirty_flags == DISP_DIRTY_NONE) return;
 
   // ── 2. Home page ──────────────────────────────────────────────────────

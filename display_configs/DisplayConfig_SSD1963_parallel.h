@@ -19,7 +19,11 @@
 // ---------------------------------------------------------------------------
 //  Display driver
 // ---------------------------------------------------------------------------
-#define SSD1963_800         // SSD1963 controller, 800x480 resolution
+// Must use one of the recognised _DRIVER variants — the library's User_Setup_Select.h
+// (which maps bare names like SSD1963_800 → SSD1963_800_DRIVER) is bypassed entirely
+// when USER_SETUP_LOADED is defined.  SSD1963_800BD_DRIVER matches the timing in
+// Setup104a_RP2040_SSD1963_parallel.h that this config was derived from.
+#define SSD1963_800BD_DRIVER  // SSD1963 800×480 (BuyDisplay / compatible panel)
 
 // ---------------------------------------------------------------------------
 //  Interface — 8-bit parallel via RP2040 PIO
@@ -49,7 +53,8 @@
 #define TFT_D7   13
 
 // ---------------------------------------------------------------------------
-//  Touch — handled separately via my_bb_captouch over I2C; not driven by TFT_eSPI
+//  Touch — handled separately via my_bb_captouch over I2C; not driven by TFT_eSPI.
+//  TOUCH_CS = -1 disables the TFT_eSPI touch driver without triggering pin macros.
 // ---------------------------------------------------------------------------
 #define TOUCH_CS -1
 

@@ -91,6 +91,7 @@ void updateBridgeAnimation();
 #define DISP_DIRTY_DOORS   0x04
 
 extern bool              _displayOK;            // true only if tft.init() succeeded
+extern volatile bool     _display_page_drawing; // true while Core 1 is doing a full page redraw
 extern volatile uint8_t  _display_dirty_flags;
 extern volatile uint32_t _track_dirty_mask;
 extern volatile uint32_t _door_dirty_mask;

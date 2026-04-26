@@ -13,7 +13,7 @@ An OpenLCB (LCC) node for a model railroad turntable, running on a Raspberry Pi 
 - **Up to 20 tracks** — individual Front/Back/Occupancy/RailCom event IDs per track
 - **Roundhouse door sync** — consumes door-toggle events from the Roundhouse node; door status shown on the display
 - **Live bridge animation** — bridge redraws every 1° of stepper rotation during movement
-- **Multi-board support** — single `#define` in the `.ino` selects v2.4 or v2.7 Stepper board pin layout
+- **Multi-board support** — two `#define` lines in `ProjectConfig.h` select the board and display driver; everything else is derived automatically
 - **Multi-display support** — three compile-time display modes covering 800×480 parallel and 1024×600 SPI panels
 - **RA8876 layer compositing** (v2.7 native mode) — static track background on hardware Layer 0; animated bridge on Layer 1; no track-line erase/redraw on each animation frame
 - **LCC Fast Clock consumer** — fast clock displayed on the screen
@@ -28,15 +28,15 @@ An OpenLCB (LCC) node for a model railroad turntable, running on a Raspberry Pi 
 
 ## Board Selection
 
-Set exactly one define in [`LCC_RPiPico_Turntable.ino`](LCC_RPiPico_Turntable.ino) before the first `#include`:
+Edit [`ProjectConfig.h`](ProjectConfig.h) — it is the **single source of truth** for board and driver selection. [`BoardSettings.h`](BoardSettings.h) includes it first, so all translation units pick up the same defines automatically.
 
 ```cpp
-// Uncomment exactly one:
-#define LCC_BOARD_STEPPER_V24
-// #define LCC_BOARD_STEPPER_V27
+// Uncomment exactly one board:
+//#define LCC_BOARD_STEPPER_V24    // v2.4 board (SSD1963 parallel)
+#define LCC_BOARD_STEPPER_V27    // v2.7 board (RA8876 SPI)
 ```
 
-[`BoardSettings.h`](BoardSettings.h) dispatches to the correct pin header automatically. All pin definitions live in `board_configs/`:
+All pin definitions live in `board_configs/`:
 
 | Header | Board |
 |---|---|
@@ -55,16 +55,28 @@ Three display modes are available, selected at compile time via `DISPLAY_DRIVER_
 | `DISPLAY_DRIVER_RA8876_TFTESPI` | v2.7 (default) | `TFT_eSPI_RA8876` | 1024×600 (TFTM101), SPI1 |
 | `DISPLAY_DRIVER_RA8876_NATIVE` | v2.7 (optional) | `RA8876_RP2040` | 1024×600 (TFTM101), SPI1 |
 
-To use the native RA8876 driver (unlocks layer compositing and BTE acceleration), add this define **before** the board `#define` in the `.ino`:
+To switch board or driver, make **two edits** — one in the sketch directory, one in the library:
+
+| Target | `ProjectConfig.h` | `TFT_eSPI_RA8876/User_Setup_LCC_Active.h` |
+|---|---|---|
+| v2.4 SSD1963 parallel | `LCC_BOARD_STEPPER_V24` | `#include "Setup104a_RP2040_SSD1963_parallel.h"` |
+| v2.7 TFT_eSPI (default) | `LCC_BOARD_STEPPER_V27` + `DISPLAY_DRIVER_RA8876_TFTESPI` | `#include "User_Setup_RP2040_RA8876_SPI.h"` |
+| v2.7 native RA8876 | `LCC_BOARD_STEPPER_V27` + `DISPLAY_DRIVER_RA8876_NATIVE` | `#include "User_Setup_RP2040_RA8876_SPI.h"` |
+
+`User_Setup_LCC_Active.h` is the only library file ever edited. Arduino IDE compiles library sources independently (the sketch directory is not on the library include path), so the library needs its own selector file. `User_Setup_LCC_Active.h` is included by `User_Setup_Select.h` in the library root; switch the active line to match your board, keeping the other commented out.
+
+For v2.7 the display driver line in `ProjectConfig.h` selects between the two RA8876 modes:
 
 ```cpp
-#define DISPLAY_DRIVER_RA8876_NATIVE
 #define LCC_BOARD_STEPPER_V27
+// v2.7 display driver — uncomment ONE:
+#define DISPLAY_DRIVER_RA8876_NATIVE    // native RA8876_RP2040 library (layers, BTE)
+//#define DISPLAY_DRIVER_RA8876_TFTESPI // TFT_eSPI_RA8876 library
 ```
 
 All display abstraction is handled by [`DisplayDriver.h`](DisplayDriver.h) / [`DisplayDriver.cpp`](DisplayDriver.cpp). For the two TFT_eSPI modes `TT_Display` is a typedef for `TFT_eSPI`. For native mode it is a compatibility wrapper class that presents the same API so `UserInterface.cpp` compiles unchanged, while also exposing `selectCanvas()`, `freezeBackground()`, and `clearCanvas()` for layer compositing.
 
-**No `User_Setup.h` edits are required.** All TFT_eSPI pin macros and `USER_SETUP_LOADED` are set in `display_configs/`:
+TFT_eSPI pin macros are set in `display_configs/`:
 
 | Config header | Mode |
 |---|---|
@@ -209,7 +221,7 @@ See [`sketch.yaml`](sketch.yaml) for the full build profile:
 - Optimization: `Small`
 - C++ standard: `gnu++17`
 
-The display driver is selected entirely at compile time via `DISPLAY_DRIVER_*` defines. No edits to the `TFT_eSPI` library's `User_Setup.h` are needed — `USER_SETUP_LOADED` and all pin macros are set in the `display_configs/` headers included automatically by the board config.
+The display driver is selected entirely at compile time via `DISPLAY_DRIVER_*` defines in `ProjectConfig.h`. When switching boards you also need to update `User_Setup_LCC_Active.h` inside the `TFT_eSPI_RA8876` library folder — see the Display Driver Selection table above. All TFT_eSPI pin macros are set in the `display_configs/` headers; the library's `User_Setup.h` is never touched.
 
 ---
 

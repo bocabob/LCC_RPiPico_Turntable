@@ -445,12 +445,10 @@ void setup1() {
   }
   else {
     drawHomePage();
-#if !defined(DISPLAY_DRIVER_RA8876_NATIVE)
-    // TFT_eSPI modes: draw tracks over the initial bridge on the single framebuffer.
-    // For RA8876_NATIVE, drawTurnTable() already placed tracks on Layer 0 and left
-    // Layer 1 as the active canvas — calling drawTracks() here would land on Layer 1.
-    drawTracks();
-#endif
+    // drawTracks() is now called inside drawHomePage() for TFT_eSPI modes (under
+    // the _display_page_drawing guard) to prevent a two-core SPI1 race between
+    // Core 1 (here in setup1) and Core 0's updateBridgeAnimation().  No separate
+    // drawTracks() call is needed here.
     homed = 0;
     initiateHoming();
   }
