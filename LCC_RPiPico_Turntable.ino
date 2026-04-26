@@ -511,19 +511,30 @@ void loop() {
 
   OpenLcbConfig_run();
 
-  touchIO();    // process touch input
+  // Guard all display/touch calls until setup1() has finished initialising
+  // the display (SPI1) and touch controller (Wire/I2C0).  Without this guard:
+  //   - Core 0 and Core 1 race on SPI1 while setupDisplay() is still running,
+  //     corrupting RA8876 transactions and potentially hanging the SPI bus.
+  //   - touchIO() polls the GT9271 via Wire before Wire.begin(TOUCH_SDA,SCL)
+  //     has been called; the NACK/timeout (~1 s) blocks Core 0 and starves
+  //     OpenLcbConfig_run(), making the node appear absent on the LCC network.
+  if (setupComplete) {
 
-  // Redraw bridge whenever the stepper has moved ≥ 1° since the last frame.
-  // For RA8876_NATIVE this only touches Layer 1; tracks on Layer 0 are untouched.
-  // For TFT_eSPI modes the function also calls drawTracks() to restore track lines
-  // erased by the fillCircle erase in drawBridge().
-  updateBridgeAnimation();
+    touchIO();    // process touch input
 
-  // Drain all display dirty flags set by event callbacks (door state, track
-  // occupancy, RailCom addresses, bridge power state, etc.).  Runs after
-  // updateBridgeAnimation() so a simultaneous bridge + track update on
-  // TFT_eSPI modes is handled by the bridge path covering both in one pass.
-  updateDisplay();
+    // Redraw bridge whenever the stepper has moved ≥ 1° since the last frame.
+    // For RA8876_NATIVE this only touches Layer 1; tracks on Layer 0 are untouched.
+    // For TFT_eSPI modes the function also calls drawTracks() to restore track lines
+    // erased by the fillCircle erase in drawBridge().
+    updateBridgeAnimation();
+
+    // Drain all display dirty flags set by event callbacks (door state, track
+    // occupancy, RailCom addresses, bridge power state, etc.).  Runs after
+    // updateBridgeAnimation() so a simultaneous bridge + track update on
+    // TFT_eSPI modes is handled by the bridge path covering both in one pass.
+    updateDisplay();
+
+  }
 
 }
 
