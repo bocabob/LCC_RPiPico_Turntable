@@ -2,12 +2,15 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+See [../LCC_RPiPico_Common/LCC_NODE_STANDARD.md](../LCC_RPiPico_Common/LCC_NODE_STANDARD.md) for cross-project conventions (toolchain, board versioning, dual-core contract, CDI/EEPROM handling, naming). This file documents only what is specific to this node.
+
 ## Build Environment
 
 - **IDE**: Arduino IDE (primary) or VSCode with Arduino extension
 - **Board**: Raspberry Pi Pico 2 (`rp2040:rp2040:rpipico2`) using [Philhower's RP2040 package](https://github.com/earlephilhower/arduino-pico#installation) — NOT the Mbed package
 - **C++ Standard**: gnu++17
 - **Build config**: [sketch.yaml](sketch.yaml) (4MB flash, optimization: small)
+- **Board family/revision**: `LCC_BOARD_STEPPER_V295` (`ProjectConfig.h`) — `STEPPER` family (Node board + integrated TMC2209/display). Per the standard's §4, `STEPPER` is **legacy and frozen**: do not add new `STEPPER` board revisions; any new stepper-driven node should target a generic `NODE`-family board plus the TMC2209 breakout instead. This project continues to use `STEPPER_V295` as its current hardware target.
 
 Required libraries (install via Arduino Library Manager):
 - `ACAN2517` by Pierre Molinaro — CAN transceiver (MCP2517/18)
@@ -47,6 +50,27 @@ Config is stored in external I2C EEPROM using a CDI (XML)-generated memory map:
 - [Documentation/openlcb-config-2026-01-30.xml](Documentation/openlcb-config-2026-01-30.xml) — CDI descriptor
 
 Config structures use `#pragma pack(push, 1)` for exact memory layout.
+
+**Protected NVM identity block** (standard §7.1) is implemented:
+`NodeIdentity.h`/`.cpp` read/write a 12-byte block above `CONFIG_MEM_SIZE`
+(now `32704`, down from `32768`, freeing 64 reserved bytes). On boot, if the
+block isn't provisioned, the node falls back to the legacy hardcoded
+`NODE_ID_DEFAULT` for that session and logs a warning — it does not halt.
+Provision a permanent ID with the serial `'N<12 hex digits>'` + `'Y'` confirm
+commands.
+
+**v3.0 board support**: `LCC_BOARD_NODE_V30` (generic Node board) is now
+selectable in `ProjectConfig.h`, with breakout combinations chosen in
+`NodeConfig.h`:
+- `TURNTABLE_BREAKOUT_SPI_TMC2209` — SPI display + cap touch on I/O-1,
+  TMC2209 stepper breakout on I/O-2.
+- `TURNTABLE_BREAKOUT_PARALLEL_TMC2209` — parallel display + cap touch
+  (I/O-1), touch/sensors/stepper/NeoPixel combo card (I/O-2), display
+  control D_WR/D_D-C (I/O-3 Pin2/Pin5, via the new
+  `display_configs/DisplayConfig_SSD1963_parallel_v30.h`). Uses gp28 for
+  D_D/C, which is shared with `GOLD_BUTTON_PIN` — Gold button is unavailable
+  on this combo, same pattern as `STEPPER_DIR_PIN`/`BLUE_BUTTON_PIN` sharing
+  gp5 on both combos.
 
 ### Key Data Flow
 

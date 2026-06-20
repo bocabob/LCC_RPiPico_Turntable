@@ -1,5 +1,5 @@
 /** \copyright
- * Copyright (c) 2025, Jim Kueneman, Bob Gamble, David Harris, and Alex Shepherd
+ * Copyright (c) 2025, Bob Gamble and Jim Kueneman
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -29,7 +29,7 @@
  * This sketch creates an OpenLcb Turntable controller node running on a
  * Raspberry Pi Pico 2 with an MCP2518 hardware CAN controller.
  *
- * @author Bob Gamble, David Harris, Alex Shepherd, and Jim Kueneman
+ * @author Bob Gamble and Jim Kueneman
  * @date 23 Feb 2025
  */
 /*
@@ -62,6 +62,7 @@
 
 #include "Arduino.h"
 #include <Wire.h>
+#include <stdlib.h>
 #include <LibPrintf.h>
 
 #include "BoardSettings.h"
@@ -69,6 +70,7 @@
 #include "callbacks.h"
 #include "openlcb_user_config.h"
 #include "config_mem_helper.h"
+#include "NodeIdentity.h"
 
 #include "src/pico/rpi_pico_drivers.h"
 #include "src/pico/rpi_pico_can_drivers.h"
@@ -86,7 +88,10 @@
 #include "src/application_drivers/AccelStepper.h"
 #include "UserInterface.h"
 
-#define NODE_ID 0x050101019419      // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
+// Fallback used only until the protected NVM identity block is provisioned
+// (see NodeIdentity.h / LCC_NODE_STANDARD.md §7.1). Provision a permanent ID
+// with the 'N' serial command rather than relying on this for new boards.
+#define NODE_ID_DEFAULT 0x050101019419      // 05 01 01 01 94 ** range assigned to Bob Gamble / Southern Piedmont
 
 
 ////// DECLARATIONS
@@ -356,7 +361,13 @@ void setup() {
 
   Serial.println("Creating Node.....");
 
-  OpenLcbUserConfig_node_id = OpenLcbConfig_create_node(NODE_ID, &OpenLcbUserConfig_node_parameters);
+  uint64_t node_id = NodeIdentity_read();
+  if (node_id == 0) {
+    Serial.println("*** Node identity not provisioned in protected NVM ***");
+    Serial.println("Using built-in default ID for this boot. Provision a permanent ID with 'N<12-hex-digit-id>' then 'Y' to confirm.");
+    node_id = NODE_ID_DEFAULT;
+  }
+  OpenLcbUserConfig_node_id = OpenLcbConfig_create_node(node_id, &OpenLcbUserConfig_node_parameters);
   // do this after initialization or the I2C will not be initialized
 
   _check_for_nvm_initialization();
@@ -468,6 +479,7 @@ void loop() {
         Serial.println("'p': Toggle Message Logging");
         Serial.println("'r': Resetting NVM to 0xFF for a fresh boot");
         Serial.println("'m': Toggle Config Mem read/write Logging");
+        Serial.println("'N<12 hex digits>': Provision node identity, e.g. N050101019419 — confirm with 'Y'");
       break;
       case 'c':
         Serial.println("Setting NVM to 0x00...");
@@ -501,10 +513,38 @@ void loop() {
       case 'x':      
        Load_application_defaults(OpenLcbUserConfig_node_id);
       break;
-      case 'z':    
+      case 'z':
        Set_Application_Values_From_Config(OpenLcbUserConfig_node_id, &ConfigMemHelper_config_data);
       break;
-    };  
+      case 'N': {
+        char hexbuf[13];
+        size_t n = Serial.readBytesUntil('\n', hexbuf, 12);
+        if (n > 0 && hexbuf[n - 1] == '\r') n--;
+        hexbuf[n] = '\0';
+        if (n != 12) {
+          Serial.println("Usage: N<12 hex digits>, e.g. N050101019419");
+        } else {
+          uint64_t id = strtoull(hexbuf, NULL, 16);
+          NodeIdentity_begin_provision(id);
+          Serial.print("Confirm with 'Y' to write node ID 0x");
+          Serial.println(hexbuf);
+        }
+      }
+      break;
+      case 'Y':
+        if (NodeIdentity_provision_pending()) {
+          if (NodeIdentity_confirm_provision()) {
+            Serial.println("Node identity written. Rebooting...");
+            delay(100);
+            rp2040.reboot();
+          } else {
+            Serial.println("Failed to write node identity.");
+          }
+        } else {
+          Serial.println("No pending provisioning request.");
+        }
+      break;
+    };
   }
 
   RPiPicoCanDriver_process_receive();

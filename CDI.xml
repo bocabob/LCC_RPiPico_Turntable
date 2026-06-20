@@ -4,8 +4,8 @@
     <identification>
         <manufacturer>MANU</manufacturer>
         <model>MODEL</model>
-        <hardwareVersion>2.6A</hardwareVersion>
-        <softwareVersion>2.1</softwareVersion>
+        <hardwareVersion>2.7A</hardwareVersion>
+        <softwareVersion>2.2</softwareVersion>
     </identification>
     <acdi/>
     <segment origin="0" space="253">

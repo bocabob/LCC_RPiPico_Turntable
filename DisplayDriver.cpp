@@ -35,6 +35,7 @@ int16_t TT_Display::_fontCharWidth(uint8_t font) {
         case 1:
         case 2:  return  8;   // 8×16 CGROM font
         case 4:  return 12;   // 12×24 CGROM font
+        case 5:  return 16;   // 16×32 CGROM font, 1× scale
         case 6:
         case 7:
         case 8:  return 32;   // 16×32 CGROM, 2× scale → 32 px wide
@@ -48,6 +49,7 @@ int16_t TT_Display::_fontHeight(uint8_t font) {
         case 1:
         case 2:  return 16;   // 8×16
         case 4:  return 24;   // 12×24
+        case 5:  return 32;   // 16×32, 1× scale
         case 6:
         case 7:
         case 8:  return 64;   // 16×32 × 2
@@ -77,6 +79,8 @@ void TT_Display::_selectFont(uint8_t font) {
                               RA8876_TEXT_CHROMA_KEY_DISABLE,
                               RA8876_TEXT_WIDTH_ENLARGEMENT_X1,
                               RA8876_TEXT_HEIGHT_ENLARGEMENT_X1);
+            _FNTwidth  =  8;
+            _FNTheight = 16;
             break;
         case 4:
             setTextParameter1(RA8876_SELECT_INTERNAL_CGROM,
@@ -86,6 +90,19 @@ void TT_Display::_selectFont(uint8_t font) {
                               RA8876_TEXT_CHROMA_KEY_DISABLE,
                               RA8876_TEXT_WIDTH_ENLARGEMENT_X1,
                               RA8876_TEXT_HEIGHT_ENLARGEMENT_X1);
+            _FNTwidth  = 12;   // 12×24 CGROM cell; cursor must advance 12 px per char
+            _FNTheight = 24;
+            break;
+        case 5:
+            setTextParameter1(RA8876_SELECT_INTERNAL_CGROM,
+                              RA8876_CHAR_HEIGHT_32,
+                              RA8876_SELECT_8859_1);
+            setTextParameter2(RA8876_TEXT_FULL_ALIGN_DISABLE,
+                              RA8876_TEXT_CHROMA_KEY_DISABLE,
+                              RA8876_TEXT_WIDTH_ENLARGEMENT_X1,
+                              RA8876_TEXT_HEIGHT_ENLARGEMENT_X1);
+            _FNTwidth  = 16;   // 16×32 CGROM cell, 1× scale
+            _FNTheight = 32;
             break;
         case 6:
         case 7:
@@ -97,6 +114,8 @@ void TT_Display::_selectFont(uint8_t font) {
                               RA8876_TEXT_CHROMA_KEY_DISABLE,
                               RA8876_TEXT_WIDTH_ENLARGEMENT_X2,
                               RA8876_TEXT_HEIGHT_ENLARGEMENT_X2);
+            _FNTwidth  = 32;   // 16×32 CGROM cell × 2× scale = 32 px wide
+            _FNTheight = 64;   // 32 px × 2× scale
             break;
         default:
             setTextParameter1(RA8876_SELECT_INTERNAL_CGROM,
@@ -106,6 +125,8 @@ void TT_Display::_selectFont(uint8_t font) {
                               RA8876_TEXT_CHROMA_KEY_DISABLE,
                               RA8876_TEXT_WIDTH_ENLARGEMENT_X1,
                               RA8876_TEXT_HEIGHT_ENLARGEMENT_X1);
+            _FNTwidth  =  8;
+            _FNTheight = 16;
             break;
     }
 }

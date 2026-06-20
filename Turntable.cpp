@@ -896,20 +896,17 @@ void Case8(){
 void touchCommand(int boxCode)
 { 
 /*
-0 = null spot
- PageBoxes 20        
-1 = bridge
-2 = bridge shack
-3 - 20 = page buttons
+  boxCode layout (see BoardSettings.h for current constant values):
 
-variable selection buttons = 2 * variables, add to pageboxes to get track count variable box #define TrackSelBoxes 24    
-Track setting buttons = 7 * tracks, add to TrackSelBoxes to get track box starting point #define TrackBoxes 144      
-Servo selection buttons = 2 * variables, add to TrackBoxes to get servo variable update box #define ServoSelBoxes 146   
-Servo setting buttons = 6 * servos, add to TrackSelBoxes to get track box starting point #define ServoBox 206       
-Turntable track operation buttons = 3 * tracks, add to ServoBox to get track box starting point #define TrackBox 266      
-
- PossibleBoxes  270    // space for array of click box boundaries (static boxes plus track boxes)
-
+  0              null / no-op
+  1 .. PageBoxes page and navigation buttons (cases 1-31 in switch below)
+  > PageBoxes    turntable diagram track buttons:
+                   3 buttons per track, starting at TrackBox
+                   track  = (boxCode - TrackBox) / 3
+                   action = (boxCode - TrackBox) % 3
+                     0 = move front side to track
+                     1 = move back side to track
+                     2 = toggle door for track
 */
 // check for debounce
 box_started_ms = millis();      
@@ -948,6 +945,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       }
       break;
     case 3:      // find reference positions
+      ScreenPrint(F(" Determining Reference Positions "), HRES/2, VRES/2, 2);
       initiateReferences();
       break;
     case 4:    // Re-home
@@ -1036,6 +1034,7 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       break;
     case 15:      // clear EEPROM
       // clearEEPROM();
+      ScreenPrint(F(" Clearing EEPROM "), HRES/2, VRES/2, 2);
       ConfigMemHelper_clear_config_mem();
       drawDiagnosticPage();
       break;    
@@ -1057,73 +1056,21 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
       break;    
     case 18: // settings page
       drawButtonPage();
-      // drawConfigPage();
       break;    
     case 19:
       // determine step count - make button?
       initiateStepCount();
       break;
     case 20:
-      // decrement fullTurnSteps
-      --fullTurnSteps;
-      // drawSteps();
+      // reboot
+        Serial.println(F("Rebooting..."));
+      ScreenPrint(F(" Rebooting the node "), HRES/2, VRES/2, 2);
+        delay(1000);
+        rp2040.reboot();
       break;    
     case 21:
       // increment fullTurnSteps
-      ++fullTurnSteps;
       // drawSteps();
-      break;    
-    case 22:
-      // read step count from storage
-      // fullTurnSteps = getSteps();
-      // drawSteps();
-      break;    
-    case 23:
-      // write step count to storage
-      // writeSteps(fullTurnSteps);
-      // drawSteps();
-      break;    
-    case 24:
-      // read references from storage
-      getReferences();
-      drawDiagnosticPage();
-      break;    
-    case 25:
-      // write references to storage
-      writeReferences();
-      // drawConfigPage();
-      break;    
-    case 26:
-      //  load default tracks - updated to CDI data      
-      // writeNVMdefaults();
-      // readNVM();
-      // setTrackDefaults(); // this updates just to RAM, not CDI
-      drawDiagnosticPage();
-      break;    
-    case 27:
-      // read tracks from storage
-      getTracks();
-      drawDiagnosticPage();
-      break;    
-    case 28:
-      // write tracks to storage
-      writeTracks();
-      // drawConfigPage();
-      break;    
-    case 29:
-      //  load default servos
-      // setServoDefaults();
-      drawDiagnosticPage();
-      break;    
-    case 30:
-      // read servos from storage
-      // getServos();
-      drawDiagnosticPage();
-      break;    
-    case 31:
-      // write servos to storage
-      // writeServos();
-      // drawConfigPage();
       break;    
     default:
       /*
@@ -1135,200 +1082,42 @@ if (box_started_ms - box_last_change < box_db_time)     return;     // Debounce 
     #endif   
       break;
     }    
-  } 
-  else  // process a track variable box  
+  }
+  else  // track buttons from the turntable diagram (boxCode >= TrackBox)
   {
-    if (boxCode <= TrackSelBoxes) {
-      int action = (boxCode-PageBoxes-1);
-      switch (action){
-      case 0:
-        // decrement track count
-        if (ConfigMemHelper_config_data.attributes.TrackCount > 0){
-           --ConfigMemHelper_config_data.attributes.TrackCount;
-           writeCount();
-        }
-        break;
-      case 1:
-        // increment track count
-        if (ConfigMemHelper_config_data.attributes.TrackCount < NUM_TRACKS) {
-           ++ConfigMemHelper_config_data.attributes.TrackCount;
-           writeCount();
-        }
-        break;
-      case 2:
-        // decrement track edit selection
-        if (ConfigMemHelper_config_data.attributes.ReferenceCount > 0) --ConfigMemHelper_config_data.attributes.ReferenceCount;
-        break;
-      case 3:
-        // increment track edit selection
-        if (ConfigMemHelper_config_data.attributes.ReferenceCount < NumberOfReferences) ++ConfigMemHelper_config_data.attributes.ReferenceCount;
-        break;
-      case 4:
-        // decrement track edit selection
-        if (editTrack > 0) --editTrack;
-        break;
-      case 5:
-        // increment track edit selection
-        if (editTrack < ConfigMemHelper_config_data.attributes.TrackCount) ++editTrack;
-        break;
-      default:
-        // statements
-        break;
-      }   
-      // drawSetting(editTrack);
-    }
-    else  // process a track box
-    {
-      if (boxCode < TrackBoxes) {
-        int action = (boxCode-TrackSelBoxes-1) % 7;
-        switch (action){
-        case 0:
-          // decrement address
-          if (ConfigMemHelper_config_data.Tracks[editTrack].address > 0) --ConfigMemHelper_config_data.Tracks[editTrack].address ;
-          break;
+    int track  = (boxCode - TrackBox) / 3;
+    int action = (boxCode - TrackBox) % 3;
+    switch (action) {
+    case 0:
+      // move front side to track
+      MoveToTrack(track, 32);
+      break;
+    case 1:
+      // move back side to track
+      MoveToTrack(track, 0);
+      break;
+    case 2:
+      // toggle door for track
+      if (ConfigMemHelper_config_data.Tracks[track].doorPresent)
+      {
+        produceDoor(ConfigMemHelper_config_data.Tracks[track].servoNumber);
+        switch (activeScreen)
+        {
         case 1:
-          // increment address
-          // if (ConfigMemHelper_config_data.Tracks[editTrack].address < MaxDCCaddress) ++ConfigMemHelper_config_data.Tracks[editTrack].address;
+          if (fullTurnSteps != 0) {
+            drawTrack(track, ((ConfigMemHelper_config_data.Tracks[track].trackFront * 360) / fullTurnSteps));
+          }
           break;
         case 2:
-          // decrement step position
-          if (ConfigMemHelper_config_data.Tracks[editTrack].trackFront > 0) {
-            --ConfigMemHelper_config_data.Tracks[editTrack].trackFront;
-            --ConfigMemHelper_config_data.Tracks[editTrack].trackBack;
-          }
-          break;
-        case 3:
-          // increment step position
-          if (ConfigMemHelper_config_data.Tracks[editTrack].trackFront < fullTurnSteps) {
-            ++ConfigMemHelper_config_data.Tracks[editTrack].trackFront;
-            ++ConfigMemHelper_config_data.Tracks[editTrack].trackBack;
-          }
-          break;
-        case 4:
-          // toggle door presence to track w/redraw
-          if (ConfigMemHelper_config_data.Tracks[editTrack].doorPresent)
-          {ConfigMemHelper_config_data.Tracks[editTrack].doorPresent = false;}
-          else
-          {ConfigMemHelper_config_data.Tracks[editTrack].doorPresent = true;}
-          break;
-        case 5:
-          // decrement servo number
-          if (ConfigMemHelper_config_data.Tracks[editTrack].servoNumber > 0) --ConfigMemHelper_config_data.Tracks[editTrack].servoNumber ;
-          break;
-        case 6:
-          // increment servo number
-          // if (ConfigMemHelper_config_data.Tracks[editTrack].servoNumber < i_max_servo) ++ConfigMemHelper_config_data.Tracks[editTrack].servoNumber;
+          drawDoorButton(track);
           break;
         default:
-          // statements
           break;
         }
-        // drawSetting(editTrack);
       }
-      else  // process a servo variable box  
-      {
-        if (boxCode <= ServoSelBoxes) {
-          int action = (boxCode-TrackBoxes-1);
-          switch (action){
-          case 0:
-            // decrement track count
-            if (editServo > 0) --editServo;
-            break;
-          case 1:
-            // increment track count
-            // if (editServo < i_max_servo) ++editServo;
-            break;
-          default:
-            // statements
-            break;
-          }      
-          // drawServo(editServo);
-        }
-        else {  // buttons on servo settings page ServoSelBoxes
-          if (boxCode < TrackBox) {
-            int action = (boxCode-ServoSelBoxes-1) % 6;
-            switch (action){
-          case 0:
-            // decrement address
-            // if (Servos[editServo].address > 0) --Servos[editServo].address ;
-            break;
-          case 1:
-            // increment address
-            // if (Servos[editServo].address < MaxDCCaddress) ++Servos[editServo].address;
-            break;
-          case 2:
-            // decrement servo minimum range
-            // if (Servos[editServo].ServoMin > MinServoRange) --Servos[editServo].ServoMin ;
-            break;
-          case 3:
-            // increment servo minimum range
-            // if (Servos[editServo].ServoMin < MaxServoRange) ++Servos[editServo].ServoMin;
-            break;
-          case 4:
-            // decrement servo minimum range
-            // if (Servos[editServo].ServoMax > MinServoRange) --Servos[editServo].ServoMax ;
-            break;
-          case 5:
-            // increment servo minimum range
-            // if (Servos[editServo].ServoMax < MaxServoRange) ++Servos[editServo].ServoMax;
-            break;
-            default:
-              // statements
-              break;
-            }
-            // drawServo(editServo);
-          }
-          else { // track buttons from the turntable diagram
-            int track = (boxCode - TrackBox)/3;
-            int action = (boxCode-TrackBox) % 3;
-            switch (action){
-            case 0:
-              // move front side to track
-              // move to track foreward
-              MoveToTrack(track,32);
-              break;
-            case 1:
-              // move back side to track
-              // move to track backward
-              MoveToTrack(track,0);
-              break;
-            case 2:
-              // toggle door to track w/redraw
-              // Serial.print(F("Door: "));
-              // Serial.print(track);
-              if (ConfigMemHelper_config_data.Tracks[track].doorPresent) 
-              {
-                produceDoor(ConfigMemHelper_config_data.Tracks[track].servoNumber);
-              // Serial.print(F("  Servo: "));
-              // Serial.println(ConfigMemHelper_config_data.Tracks[track].servoNumber);
-                // if (Servos[ConfigMemHelper_config_data.Tracks[track].servoNumber].Status)
-                // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 0);            }
-                // else
-                // {              MoveServo(ConfigMemHelper_config_data.Tracks[track].servoNumber, 32);            }
-                switch (activeScreen)
-                {
-                case  1:
-                  /* code */
-                  if (fullTurnSteps != 0) {
-                    drawTrack(track,((ConfigMemHelper_config_data.Tracks[track].trackFront*360)/fullTurnSteps));
-                  }
-                  break;
-                case 2:
-                  /* code */
-                  drawDoorButton(track);
-                  break;
-                default:
-                  break;
-                }
-              }
-              break;
-            default:
-              // statements
-              break;
-            }
-          }
-        }
-      }
+      break;
+    default:
+      break;
     }
   }
   

@@ -197,7 +197,7 @@ const node_parameters_t OpenLcbUserConfig_node_parameters = {
     .snip.mfg_version = 4,
     .snip.name = "Gamble",
     .snip.model = "Turntable Controller",
-    .snip.hardware_version = "2.6A",
+    .snip.hardware_version = "2.95B",
     .snip.software_version = "2.2.0",
     .snip.user_version = 2,
 

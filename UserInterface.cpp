@@ -439,10 +439,10 @@ void drawFastClock(int hour, int minute)
     TimeText.toCharArray(buffer,30);
     {
       int ty = (VRES/2)-30;
-      int fh = tft.fontHeight(4);
-      tft.fillRect(5, ty - fh/2, tft.textWidth("Fast Clock: 00:00", 4) + 10, fh, TFT_BLACK);
+      int fh = tft.fontHeight(5);
+      tft.fillRect(5, ty - fh/2, tft.textWidth("Fast Clock: 00:00", 5) + 10, fh, TFT_BLACK);
     }
-    tft.drawString(buffer, 5, (VRES/2)-30, 4);
+    tft.drawString(buffer, 5, (VRES/2)-30, 5);
 
     // tft.setCursor(HRES/8, (VRES/2)-30);
     // tft.print(hour);
@@ -639,13 +639,17 @@ void drawDiagnosticPage()
   int row = VRES - (vSpace * 1);
   // Clear the screen
   tft.fillScreen(TFT_BLACK);
-  drawButton(12,butLen,col,row,TFT_GREEN,"Reset Defaults");  // go to settings page
+  drawButton(15,butLen,col,row,TFT_RED,"Zero NVM");  // reset all settings to defaults and restart
   col = col + hSpace;
-  drawButton(3,butLen,col,row,TFT_GREEN,"Configure");  // run configuration routine
-  col = col + hSpace*2;
-  drawButton(14,butLen,col,row,TFT_GREEN,"TurnTable");  // go to home page
+  drawButton(12,butLen,col,row,TFT_RED,"Set Defaults");  // reset all settings to defaults and restart
   col = col + hSpace;
-  drawButton(18,butLen,col,row,TFT_GREEN,"Buttons"); // go to config page
+  drawButton(3,butLen,col,row,TFT_RED,"References");  // run find reference routine
+  col = col + hSpace;
+  drawButton(20,butLen,col,row,TFT_YELLOW,"Restart");  // reset all settings to defaults and restart
+  col = col + hSpace;
+  drawButton(14,butLen,col,row,TFT_GREEN,"TurnTable");  // go to turntable graphical page
+  col = col + hSpace;
+  drawButton(18,butLen,col,row,TFT_GREEN,"Buttons"); // go to turntable button page
 
   drawDiagnostics();
   listServos(0);
@@ -662,7 +666,7 @@ void drawDiagnostics()
   tft.setTextDatum(TL_DATUM); // Top Left is datum
    
   tft.setCursor(0, 0, 2);
-  tft.print(F("LocoNet Turntable Control version ")); 
+  tft.print(F("LCC Turntable Control version ")); 
   tft.println(VERSION);
   
   tft.print(F("Full Turn Steps = ")); 
@@ -696,6 +700,7 @@ void drawTrackMatrix(int col)
   
   tft.setTextDatum(TL_DATUM); // Top Left is datum
   tft.println(F("Track Settings ")); 
+  tft.setCursor(col+5, tft.getCursorY()+10);
   tft.println(F("Address   Front   Back   Door Present   Door Servo")); 
   tft.setCursor(col+5, tft.getCursorY()+10);
   tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
@@ -716,12 +721,12 @@ void drawTrackMatrix(int col)
 
 void listServos(int col)
 {
-  tft.setTextDatum(TL_DATUM); // Top Left is datum
-  tft.setCursor(col, tft.getCursorY());
-  tft.println(F("Servo Settings ")); 
-  tft.setCursor(col, tft.getCursorY());
-  tft.println(F("Address   Minimum   Maximum   Door position")); 
-  tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
+  // tft.setTextDatum(TL_DATUM); // Top Left is datum
+  // tft.setCursor(col, tft.getCursorY());
+  // tft.println(F("Servo Settings ")); 
+  // tft.setCursor(col, tft.getCursorY());
+  // tft.println(F("Address   Minimum   Maximum   Door position")); 
+  // tft.setTextDatum(TR_DATUM); // Top Right is datum, so decimal point stays in same place
   // for (int i = 0; i < (sizeof(Servos) / sizeof(ServoAddress)); i++) {
   // tft.setCursor((HRES/2)+15, tft.getCursorY());
   // tft.print(Servos[i].address );
@@ -1045,19 +1050,21 @@ void drawTrack(int track, float angle)
   BPt4Y = CPtFrontY - (CosAngle * width / 2);
 
   _RailCom[track].dirty = false;
-  char buf[20];
-  if (_RailCom[track].occupied) {
-      // e.g., draw "Loco 42 (Fwd)" next to the track label
-      sprintf(buf, "%d%s",
-          _RailCom[track].dcc_address,
-          _RailCom[track].direction == dcc_detector_occupied_forward ? " Fwd" :
-          _RailCom[track].direction == dcc_detector_occupied_reverse ? " Rev" : "");
-  } else {
-      sprintf(buf, "---");  // track empty
+  if (ConfigMemHelper_config_data.attributes.tracks[track].RailCom != 0) {
+    char buf[20];
+    if (_RailCom[track].occupied) {
+        // e.g., draw "Loco 42 (Fwd)" next to the track label
+        sprintf(buf, "%d%s",
+            _RailCom[track].dcc_address,
+            _RailCom[track].direction == dcc_detector_occupied_forward ? " Fwd" :
+            _RailCom[track].direction == dcc_detector_occupied_reverse ? " Rev" : "");
+    } else {
+        sprintf(buf, "---");  // track empty
+    }
+    tft.setTextDatum(MR_DATUM);  // Set text plotting reference datum to Middle Right
+    tft.setTextPadding(tft.textWidth("9999", 2)); // get the width of the text in pixels
+    tft.drawString(buf, BPt4X, BPt3Y, 2);  // draw loco if occupied, or "---" if empty
   }
-  tft.setTextDatum(MR_DATUM);  // Set text plotting reference datum to Middle Right 
-  tft.setTextPadding(tft.textWidth("9999", 2)); // get the width of the text in pixels
-  tft.drawString(buf, BPt4X, BPt3Y, 2);  // draw the known loco on the track if occupied, or "---" if empty
   
   if (ConfigMemHelper_config_data.Tracks[track].doorPresent) {
 
