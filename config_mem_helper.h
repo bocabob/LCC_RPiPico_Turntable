@@ -66,7 +66,14 @@ typedef struct{
     struct {
       char doorName[16];        // description of this Door
       char doorShort[5];        // short description of this Door
-      event_id_t eidToggle;       // producer Toggle door position eventID
+      event_id_t eidToggle;       // producer Toggle door position eventID (command only — see PAIRED-EVENT EXPERIMENT note)
+      // PAIRED-EVENT EXPERIMENT: consumer counterparts of Roundhouse's new
+      // producer-only DoorOpenConfirmed/DoorClosedConfirmed events. Set these
+      // (via CDI/JMRI) to the same event IDs as the matching fields on the
+      // Roundhouse node. Replaces relying on eidToggle's own PC report (which
+      // carries no open/closed polarity) for live door-state sync.
+      event_id_t eidDoorOpenConfirmed;    // consumer: Roundhouse reports this door confirmed open
+      event_id_t eidDoorClosedConfirmed;  // consumer: Roundhouse reports this door confirmed closed
       uint8_t TrackLocation;    // int8 number of the track where the door is located
     } doors[MAX_DOORS];
 // Lights parameters
@@ -81,7 +88,7 @@ typedef struct{
   
 // modify as desired
 // data not used by CDI 
-  event_status_enum consumer_status[5+3*MAX_TRACKS+3+MAX_DOORS]; // Array to hold the state of each event (on/off/unknown); +MAX_DOORS for door state sync events
+  event_status_enum consumer_status[5+3*MAX_TRACKS+3+2*MAX_DOORS]; // Array to hold the state of each event (on/off/unknown); +2*MAX_DOORS for door state sync events (PAIRED-EVENT EXPERIMENT: DoorOpenConfirmed + DoorClosedConfirmed per door)
   event_status_enum producer_status[2+MAX_DOORS+2]; // Array to hold the state of each event (on/off/unknown) for the events defined in the configuration
   TrackAddress Tracks[MAX_TRACKS];
   ReferenceStep References[NumberOfReferences];

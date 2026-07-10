@@ -350,14 +350,20 @@ void _register_consumers(void) {
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidLowLuminosity_On), ConfigMemHelper_config_data.consumer_status[index]);
   index++;
 
-  // Register the Roundhouse door ToggleDoor event IDs as consumers on the Turntable.
-  // This allows the Turntable to receive "Consumer Identified" messages from the Roundhouse
-  // during LCB login, carrying the NVM-restored open/closed state for each door, so the
-  // Turntable display is synchronised at startup without any user interaction.
+  // PAIRED-EVENT EXPERIMENT: register Roundhouse's per-door DoorOpenConfirmed/
+  // DoorClosedConfirmed events as consumers, replacing the old eidToggle consumer
+  // registration. Each of these carries genuine SET/CLEAR polarity (unlike
+  // eidToggle's own bare PC report), so they can be trusted both at LCC login
+  // (Producer Identified) and live, whenever Roundhouse finishes a door move
+  // (PC Event Report) — see Callbacks_on_consumed_event_pcer()/TurntableCallback().
   for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
     OpenLcbApplication_register_consumer_eventid(
         OpenLcbUserConfig_node_id,
-        swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidToggle),
+        swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidDoorOpenConfirmed),
+        ConfigMemHelper_config_data.consumer_status[index++]);
+    OpenLcbApplication_register_consumer_eventid(
+        OpenLcbUserConfig_node_id,
+        swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidDoorClosedConfirmed),
         ConfigMemHelper_config_data.consumer_status[index++]);
   }
 

@@ -53,7 +53,19 @@
 
 extern void drawFastClock(int hour, int minute);
 extern void TurntableCallback(uint16_t callin);
+extern void TurntableDoorConfirmed(int doorIdx, bool isOpenEvent, event_status_enum status);  // PAIRED-EVENT EXPERIMENT
 extern config_mem_t ConfigMemHelper_config_data;
+
+// PAIRED-EVENT EXPERIMENT: shared door-index-range math for both callback paths
+// below. Doors now use 2 consumer slots each (eidDoorOpenConfirmed,
+// eidDoorClosedConfirmed), registered consecutively per door — see
+// LCC_RPiPico_Turntable.ino's _register_consumers().
+static int _door_first_index() {
+  return NUM_TABLE_EVENTS + (int)ConfigMemHelper_config_data.attributes.TrackCount * 3 + 3;
+}
+static int _door_last_index() {
+  return _door_first_index() + (int)ConfigMemHelper_config_data.attributes.DoorCount * 2;
+}
 
 static int16_t _100ms_ticks = 0;
 static int16_t _nvm_write_ticks = 0;
@@ -127,19 +139,13 @@ void Callbacks_on_consumed_event_identified(openlcb_node_t *openlcb_node, uint16
 
   } else {
 
-    switch (openlcb_node->consumers.list[index].status) {
-
-      case EVENT_STATUS_UNKNOWN:
-        break;
-
-      case EVENT_STATUS_SET:
-        break;
-
-      case EVENT_STATUS_CLEAR:
-        break;
-    }
-    
-    ConfigMemHelper_config_data.consumer_status[index] = openlcb_node->consumers.list[index].status;
+    // PAIRED-EVENT EXPERIMENT: use the real status this Identified message
+    // actually carries (the `status` parameter), not the stale
+    // openlcb_node->consumers.list[index].status field — that field is only
+    // ever written once, at consumer registration time (see
+    // openlcb_application.c/openlcb_node.c), and never updated by incoming
+    // network traffic, so it can't reflect what this specific message says.
+    ConfigMemHelper_config_data.consumer_status[index] = status;
 
     // IMPORTANT: Only route DOOR-SYNC events through TurntableCallback() here.
     //
@@ -152,17 +158,9 @@ void Callbacks_on_consumed_event_identified(openlcb_node_t *openlcb_node, uint16
     // Door events are the ONLY events that need startup-time state sync via this path.
     // All other events (track moves, table commands, luminosity) are driven by live
     // PCER events in Callbacks_on_consumed_event_pcer() only.
-    //
-    // Door consumer events start at: NUM_TABLE_EVENTS + TrackCount*4 + 3
-    // (5 table + TrackCount*4 track + 3 luminosity events come first)
-    {
-      int firstDoorIdx = NUM_TABLE_EVENTS +
-                         (int)ConfigMemHelper_config_data.attributes.TrackCount * 3 + 3;
-      int lastDoorIdx  = firstDoorIdx +
-                         (int)ConfigMemHelper_config_data.attributes.DoorCount;
-      if ((int)index >= firstDoorIdx && (int)index < lastDoorIdx) {
-        TurntableCallback(index);
-      }
+    if ((int)index >= _door_first_index() && (int)index < _door_last_index()) {
+      int doorSlot = (int)index - _door_first_index();
+      TurntableDoorConfirmed(doorSlot / 2, (doorSlot % 2) == 0, status);
     }
   }
 }
@@ -182,24 +180,18 @@ void Callbacks_on_consumed_event_pcer(openlcb_node_t *openlcb_node, uint16_t ind
 
     ConfigMemHelper_config_data.consumer_status[index] = openlcb_node->consumers.list[index].status;
 
-    // IMPORTANT: Do NOT route door-sync events through TurntableCallback() here.
-    //
-    // A plain PC Event Report (this callback) carries no valid/invalid polarity —
-    // unlike a Producer/Consumer Identified message (Callbacks_on_consumed_event_identified),
-    // which does. Roundhouse sends a live PCER for the door's ToggleDoor event every
-    // time a door finishes moving, purely as an "activity happened" signal, not a
-    // state announcement. TurntableCallback()'s door branch mirrors
-    // consumer_status[] (which resolves to EVENT_STATUS_UNKNOWN for a bare PCER)
-    // into producer_status[], which is what drawDoorButton() displays — so routing
-    // door PCERs through here turned every door icon yellow right after every move.
-    // Door state sync is handled entirely by the Identified path (see the comment
-    // there) at LCC login time, which does carry real SET/CLEAR state; skip that
-    // range here so a live door-move PCER doesn't clobber it.
-    int firstDoorIdx = NUM_TABLE_EVENTS +
-                       (int)ConfigMemHelper_config_data.attributes.TrackCount * 3 + 3;
-    int lastDoorIdx  = firstDoorIdx +
-                       (int)ConfigMemHelper_config_data.attributes.DoorCount;
-    if ((int)index >= firstDoorIdx && (int)index < lastDoorIdx) {
+    // PAIRED-EVENT EXPERIMENT: a live PC Event Report has no valid/invalid
+    // polarity bit at the protocol level — but unlike the old single
+    // ambiguous ToggleDoor event, that's fine here, because DoorOpenConfirmed
+    // and DoorClosedConfirmed are each a distinct, unambiguous event ID.
+    // Roundhouse only ever sends the one that just became true (see
+    // Roundhouse_send_pending_door_pcers()), so the mere fact that this
+    // specific event's PCER arrived at all IS the state signal — pass
+    // EVENT_STATUS_SET unconditionally rather than trying to read a status
+    // that doesn't exist for this message type.
+    if ((int)index >= _door_first_index() && (int)index < _door_last_index()) {
+      int doorSlot = (int)index - _door_first_index();
+      TurntableDoorConfirmed(doorSlot / 2, (doorSlot % 2) == 0, EVENT_STATUS_SET);
       return;
     }
 
