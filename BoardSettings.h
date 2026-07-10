@@ -53,10 +53,19 @@
 //  set the driver define.  Board headers only set the DISPLAY_DRIVER_* define;
 //  they must NOT include the display config directly.
 // --------------------------------------------
-#if defined(DISPLAY_DRIVER_SSD1963_PARALLEL)
-  #include "display_configs/DisplayConfig_SSD1963_parallel.h"
-#elif defined(DISPLAY_DRIVER_SSD1963_PARALLEL_V30)
-  #include "display_configs/DisplayConfig_SSD1963_parallel_v30.h"
+#if defined(DISPLAY_DRIVER_SSD1963_PARALLEL) || defined(DISPLAY_DRIVER_SSD1963_PARALLEL_V30)
+  // No config header included here on purpose, for both v2.4 and v3.0:
+  // DisplayDriver.h now uses vanilla <TFT_eSPI.h> for this driver, and
+  // TFT_eSPI.cpp is its own translation unit that never sees macros defined
+  // only in our sketch (same class of bug as the TFT_eSPI_RA8876 wrapper
+  // hang — see DisplayDriver.h comment). Defining USER_SETUP_LOADED + pins
+  // here would only configure OUR sketch's view, while the library's own
+  // .cpp would silently use a different config — a split-brain mismatch.
+  // Instead, tft_setup.h (sketch root) is auto-discovered by TFT_eSPI.h via
+  // __has_include for every translation unit, including the library's own
+  // .cpp, and branches on LCC_BOARD_NODE_V30 vs not to pick the right pins
+  // for whichever board is active. DisplayConfig_SSD1963_parallel*.h are no
+  // longer used for this driver.
 #elif defined(DISPLAY_DRIVER_RA8876_TFTESPI)
   #include "display_configs/DisplayConfig_RA8876_SPI.h"
 // DISPLAY_DRIVER_RA8876_NATIVE: no TFT_eSPI config header needed
@@ -77,23 +86,6 @@
 
 // --------------------------------------------
 
-// -------------------------------------------
-// Select ONE of these for Configuration Memory Size
-// --------------------------------------------
-// #define CONFIG_MEM_SIZE      65536
-// 32768 minus 64 bytes reserved for the protected NVM region above config
-// memory (node identity block + headroom — see LCC_NODE_STANDARD.md §7.1)
-#define CONFIG_MEM_SIZE      32704
-//#define CONFIG_MEM_SIZE      16384
-//#define CONFIG_MEM_SIZE      8192
-//#define CONFIG_MEM_SIZE      4096
-//#define CONFIG_MEM_SIZE      2048
-//#define CONFIG_MEM_SIZE      1024
-//#define CONFIG_MEM_SIZE      512
-//#define CONFIG_MEM_SIZE      256
-//#define CONFIG_MEM_SIZE      128
-// --------------------------------------------
-
 // Define the size of the EEPROM chip or use 4096 if using emulated internal flash storage
 // #define I2C_DEVICESIZE      65536  // 24LC512
 #define I2C_DEVICESIZE      32768  // 24LC256
@@ -105,6 +97,22 @@
 // #define I2C_DEVICESIZE        512  // 24LC04
 // #define I2C_DEVICESIZE        256  // 24LC02
 // #define I2C_DEVICESIZE        128  // 24LC01
+
+// -------------------------------------------
+// Select ONE of these for Configuration Memory Size
+// --------------------------------------------
+// subtract 64 bytes reserved for the protected NVM region above config
+// memory (node identity block + headroom — see LCC_NODE_STANDARD.md §7.1)
+// Parenthesized deliberately: unparenthesized "I2C_DEVICESIZE-64" expands
+// wrong wherever CONFIG_MEM_SIZE is used in a division, e.g.
+// "CONFIG_MEM_SIZE / sizeof(buffer)" becomes "I2C_DEVICESIZE-64 / sizeof(buffer)"
+// = I2C_DEVICESIZE - (64/sizeof(buffer)), not (I2C_DEVICESIZE-64) / sizeof(buffer).
+// Found 2026-06-28: this silently made ConfigMemHelper_reset_config_mem()/
+// _clear_config_mem() ('r'/'c' commands) loop ~32767 times instead of 511,
+// hammering the same clamped address with rapid-fire writes and producing
+// consistent I2C Wire timeouts (error code 5).
+#define CONFIG_MEM_SIZE      (I2C_DEVICESIZE-64)
+// --------------------------------------------
 
 /////////////////////////////////////////////////////////////////////////////////////
 //  Define a valid (and free) I2C address, 0x60 is the default.

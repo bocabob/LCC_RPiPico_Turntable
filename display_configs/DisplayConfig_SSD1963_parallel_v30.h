@@ -1,18 +1,20 @@
 /*
- *  TFT_eSPI_RA8876 configuration for v3.0 Node board + Parallel Display
- *  (Capacitive Touch) breakout — combo with TMC2209 stepper breakout.
- *  Driver : SSD1963 800x480 (Setup104a_RP2040_SSD1963_parallel)
- *  Interface: 8-bit parallel, PIO-driven write strobe
+ *  SUPERSEDED / UNUSED — kept only for historical reference.
  *
- *  Pin assignments per LCC_NODE_STANDARD.md §6.1 "Parallel Display —
- *  Capacitive Touch" breakout table, corrected per the v3.0 board's actual
- *  I/O-3 wiring (D_D/C is I/O-3:Pin5 / gp28; I/O-3:Pin4 is VREF, not a GPIO).
+ *  This file is no longer included from anywhere. The v3.0 parallel-display
+ *  combo now uses vanilla TFT_eSPI (see DisplayDriver.h) configured via
+ *  tft_setup.h (sketch root) and Setup104b_RP2040_SSD1963_parallel.h in the
+ *  TFT_eSPI library itself — not TFT_eSPI_RA8876 as this file assumes.
+ *  BoardSettings.h explicitly does not include this file for either
+ *  DISPLAY_DRIVER_SSD1963_PARALLEL or DISPLAY_DRIVER_SSD1963_PARALLEL_V30
+ *  (see the comment there). The SSD1963_DRIVER-vs-SSD1963_800BD_DRIVER
+ *  root-cause note below was accurate for the TFT_eSPI_RA8876 library at the
+ *  time it was written, but is not relevant to the current vanilla-TFT_eSPI
+ *  setup, which never reads this file.
  *
- *  Defining USER_SETUP_LOADED here prevents TFT_eSPI_RA8876 from reading
- *  its own User_Setup.h.  All required parameters are set below.
- *
- *  Included automatically from NodeConfig.h when
- *  TURNTABLE_BREAKOUT_PARALLEL_TMC2209 is selected — do not include directly.
+ *  Original header (TFT_eSPI_RA8876 configuration for v3.0 Node board +
+ *  Parallel Display / Capacitive Touch breakout, TMC2209 stepper combo,
+ *  SSD1963 800x480, 8-bit parallel PIO-driven write strobe) follows:
  */
 
 #ifndef DISPLAYCONFIG_SSD1963_PARALLEL_V30_H
@@ -28,7 +30,17 @@
 // (which maps bare names like SSD1963_800 → SSD1963_800_DRIVER) is bypassed entirely
 // when USER_SETUP_LOADED is defined.  SSD1963_800BD_DRIVER matches the timing in
 // Setup104a_RP2040_SSD1963_parallel.h that this config was derived from.
+//
+// IMPORTANT: TFT_eSPI_RA8876.cpp's init()/setRotation() only branch on the bare
+// "SSD1963_DRIVER" macro (not "_800BD_DRIVER" or any other variant) to decide
+// whether to run the SSD1963 init command sequence at all. User_Setup_Select.h
+// only ever maps SSD1963_800BD_DRIVER to a cosmetic TFT_DRIVER ID — it never
+// defines SSD1963_DRIVER itself. Without it, init() sends zero SSD1963 commands,
+// the PIO parallel bus never receives data, and the CS_H macro's WAIT_FOR_STALL
+// busy-wait (Processors/TFT_eSPI_RP2040.h) then blocks forever — this was the
+// root cause of the silent hang inside tft.init() on the v3.0 parallel breakout.
 #define SSD1963_800BD_DRIVER  // SSD1963 800×480 (BuyDisplay / compatible panel)
+#define SSD1963_DRIVER        // required: this is what TFT_eSPI_RA8876.cpp actually checks
 
 // ---------------------------------------------------------------------------
 //  Interface — 8-bit parallel via RP2040 PIO

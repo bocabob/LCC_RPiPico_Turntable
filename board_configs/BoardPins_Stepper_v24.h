@@ -63,9 +63,16 @@ const uint8_t accPin    = 25;
 
 // --------------------------------------------
 //  Buttons (shared with I2C storage pins)
+//  BUTTONS_SHARE_I2C_PINS tells the .ino's factory-reset gesture check to
+//  skip entirely on this board: pinMode()'ing these pins as INPUT_PULLUP
+//  after RPiPicoDriver_setup() has already claimed them for I2C1 (Wire1)
+//  reclaims them from the I2C peripheral, breaking all NVM read/write for
+//  the rest of the boot. Real regression found 2026-06-28 — see
+//  LCC_NODE_STANDARD.md change log.
 // --------------------------------------------
 #define BLUE_BUTTON_PIN     26  // shared with I2C_SDA
 #define GOLD_BUTTON_PIN     27  // shared with I2C_SCL
+#define BUTTONS_SHARE_I2C_PINS
 
 // --------------------------------------------
 //  Display geometry & orientation

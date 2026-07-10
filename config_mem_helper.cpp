@@ -69,6 +69,16 @@ static void _load_defaults_attributes(openlcb_node_t *openlcb_node, config_mem_t
 
   config->attributes.TrackCount = NUM_TRACKS;
   config->attributes.HomeTrack = 3; // Default home track is track 4 (0 indexed)
+  // CurrentTrack is a top-level config_mem_t field (not under .attributes), so
+  // it's runtime state rather than a CDI-defined value — none of the
+  // _load_defaults_* functions touched it, meaning an 'r' (wipe to 0xFF) + 'i'
+  // (write defaults) reset left it at 255. drawBridge() indexes
+  // TrackName[CurrentTrack] (TrackName[MAX_TRACKS=20]) with no bounds check,
+  // so CurrentTrack=255 read 6375 bytes past the array into whatever flash
+  // data the linker placed next — which turned out to render as genuine,
+  // readable text from this node's own embedded CDI XML. Explicitly default
+  // it here so a reset actually initializes it.
+  config->CurrentTrack = 3; // matches HomeTrack default above
   config->attributes.ReferenceCount = false; // Disable reference correction by default
   config->attributes.FullTurnSteps = swap_endian32(FULL_TURN_STEPS); // number of steps in a full turn of the turntable, needs to be in little endian for the OpenLcbLib functions to write it correctly to memory and have it be correct when read back on a big endian system
   config->attributes.Rehome = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++;// EventID for rehome
@@ -77,8 +87,17 @@ static void _load_defaults_attributes(openlcb_node_t *openlcb_node, config_mem_t
   config->attributes.RotateTrack180 = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for rotate track 180
   config->attributes.ToggleBridgeLights = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for toggle bridge lights
   for (int t = 0; t < MAX_TRACKS; t++) {
+    // strncpy only null-terminates dest if src is SHORTER than dest's size --
+    // if src is ever >= sizeof(dest), the copy fills the whole buffer with no
+    // terminator at all. putString() (RA8876_common.cpp) renders strings with
+    // an unbounded "while (*str != '\0')" loop, so an unterminated trackName/
+    // trackShort would make it walk off the end of the array and keep
+    // rendering whatever bytes happen to follow in memory until it stumbles
+    // onto a zero byte. Force-terminate explicitly regardless of src length.
     strncpy(config->attributes.tracks[t].trackName, TrackName[t], sizeof(config->attributes.tracks[t].trackName));
+    config->attributes.tracks[t].trackName[sizeof(config->attributes.tracks[t].trackName) - 1] = '\0';
     strncpy(config->attributes.tracks[t].trackShort, TrackTag[t], sizeof(config->attributes.tracks[t].trackShort));
+    config->attributes.tracks[t].trackShort[sizeof(config->attributes.tracks[t].trackShort) - 1] = '\0';
     // config->attributes.tracks[t].trackShort = TrackTag[t];
     config->attributes.tracks[t].Front = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for track front
     config->attributes.tracks[t].Back = swap_endian64((openlcb_node->id << 16) + *consumer_index); (*consumer_index)++; // EventID for track back
@@ -155,17 +174,30 @@ void Set_Application_Values_From_Config(openlcb_node_t *openlcb_node, config_mem
   // run-time by the homing routine, not from the CDI.  Tracks 1 through TrackCount
   // are the user-configured usable tracks; TrackCount is the number of usable tracks
   // as entered in the CDI (track 0 is not counted).
-  for (int i = 1; i <= config->attributes.TrackCount; i++) {
+  //
+  // TrackCount/DoorCount come straight from NVM, which may hold stale or
+  // incompatible data (e.g. carried over from a different board/config
+  // layout). Clamp to the fixed array sizes so a corrupt count can never walk
+  // these loops past Tracks[]/tracks[]/doors[] — an out-of-bounds write here
+  // previously corrupted adjacent memory and hung the node during setup1().
+  uint8_t trackCount = config->attributes.TrackCount;
+  if (trackCount > MAX_TRACKS - 1) trackCount = MAX_TRACKS - 1;
+
+  for (int i = 1; i <= trackCount; i++) {
     config->Tracks[i].trackFront = swap_endian32(config->attributes.tracks[i].steps);
     config->Tracks[i].trackBack = config->Tracks[i].trackFront + (swap_endian32(config->attributes.FullTurnSteps) / 2);
     config->Tracks[i].doorPresent = false;
     config->Tracks[i].servoNumber = 0;
   }
 
-  for (int d = 0; d < config->attributes.DoorCount; d++) { 
-    if (config->attributes.doors[d].TrackLocation > 0) {
-      config->Tracks[config->attributes.doors[d].TrackLocation].doorPresent = true;
-      config->Tracks[config->attributes.doors[d].TrackLocation].servoNumber = d;
+  uint8_t doorCount = config->attributes.DoorCount;
+  if (doorCount > MAX_DOORS) doorCount = MAX_DOORS;
+
+  for (int d = 0; d < doorCount; d++) {
+    uint8_t trackLocation = config->attributes.doors[d].TrackLocation;
+    if (trackLocation > 0 && trackLocation < MAX_TRACKS) {
+      config->Tracks[trackLocation].doorPresent = true;
+      config->Tracks[trackLocation].servoNumber = d;
     }
   }
   homeTrack = config->attributes.HomeTrack;
@@ -323,6 +355,32 @@ bool ConfigMemHelper_read(openlcb_node_t *openlcb_node, config_mem_t *config) {
   }
 
   _direct_access = false;
+
+  // Clamp NVM-sourced counts to their actual array bounds here, once, at the
+  // single point every normal boot loads config from NVM. TrackCount/
+  // DoorCount are read directly (unclamped) all over this codebase
+  // (Turntable.cpp, UserInterface.cpp, callbacks.cpp) — fixing it at the
+  // source means every one of those loops is safe automatically, rather
+  // than needing the same clamp re-applied at every call site. Stale/
+  // incompatible NVM data with a bad count here previously caused an out-
+  // of-bounds read in drawTracks() that rendered unrelated memory content
+  // (once, literally the tail of the node's own CDI XML) as on-screen text.
+  if (config->attributes.TrackCount > MAX_TRACKS - 1) {
+    config->attributes.TrackCount = MAX_TRACKS - 1;
+  }
+  if (config->attributes.DoorCount > MAX_DOORS) {
+    config->attributes.DoorCount = MAX_DOORS;
+  }
+  // CurrentTrack indexes TrackName[MAX_TRACKS] (drawBridge(), UserInterface.cpp)
+  // with no bounds check at the use site. Same class of bug as the two
+  // clamps above, just for a top-level field instead of one under
+  // .attributes — see the comment on the default-loading side in
+  // _load_defaults_attributes() for the full story (this is what actually
+  // caused stray CDI text to render on screen during homing).
+  if (config->CurrentTrack > MAX_TRACKS - 1) {
+    config->CurrentTrack = 0;
+  }
+
   return true;
 }
 

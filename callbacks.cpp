@@ -181,7 +181,28 @@ void Callbacks_on_consumed_event_pcer(openlcb_node_t *openlcb_node, uint16_t ind
   } else {
 
     ConfigMemHelper_config_data.consumer_status[index] = openlcb_node->consumers.list[index].status;
-    
+
+    // IMPORTANT: Do NOT route door-sync events through TurntableCallback() here.
+    //
+    // A plain PC Event Report (this callback) carries no valid/invalid polarity —
+    // unlike a Producer/Consumer Identified message (Callbacks_on_consumed_event_identified),
+    // which does. Roundhouse sends a live PCER for the door's ToggleDoor event every
+    // time a door finishes moving, purely as an "activity happened" signal, not a
+    // state announcement. TurntableCallback()'s door branch mirrors
+    // consumer_status[] (which resolves to EVENT_STATUS_UNKNOWN for a bare PCER)
+    // into producer_status[], which is what drawDoorButton() displays — so routing
+    // door PCERs through here turned every door icon yellow right after every move.
+    // Door state sync is handled entirely by the Identified path (see the comment
+    // there) at LCC login time, which does carry real SET/CLEAR state; skip that
+    // range here so a live door-move PCER doesn't clobber it.
+    int firstDoorIdx = NUM_TABLE_EVENTS +
+                       (int)ConfigMemHelper_config_data.attributes.TrackCount * 3 + 3;
+    int lastDoorIdx  = firstDoorIdx +
+                       (int)ConfigMemHelper_config_data.attributes.DoorCount;
+    if ((int)index >= firstDoorIdx && (int)index < lastDoorIdx) {
+      return;
+    }
+
     TurntableCallback(index);
   }
 }

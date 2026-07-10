@@ -44,9 +44,37 @@
 #include "BoardSettings.h"
 
 // ---------------------------------------------------------------------------
-//  TFT_eSPI modes — no wrapper required
+//  SSD1963 parallel modes — vanilla TFT_eSPI (NOT the RA8876 wrapper)
+//
+//  The v2.4 board originally used plain <TFT_eSPI.h> directly and worked.
+//  A later refactor (commit 0f0e121, "DisplayDriver abstraction") moved the
+//  SSD1963 parallel path onto TFT_eSPI_RA8876 as a side effect of unifying
+//  the driver abstraction for v2.7's RA8876 SPI display — that migration
+//  was never actually verified afterward. TFT_eSPI_RA8876.cpp's own
+//  translation unit doesn't see our sketch's config macros (SSD1963_DRIVER
+//  is never defined there), so it silently falls back to whatever setup
+//  is active in its own User_Setup_Select.h — wrong hardware entirely. This
+//  caused tft.init() to hang identically on both v2.4 (real, known-good
+//  hardware) and the v3.0 parallel breakout. Switching back to vanilla
+//  TFT_eSPI restores the originally-working path; vanilla TFT_eSPI's own
+//  User_Setup_Select.h already has Setup104a_RP2040_SSD1963_parallel.h
+//  active with the v2.4 board's exact pins (including TFT_RST=2 — a real,
+//  driven GPIO, not -1 as the current DisplayConfig_SSD1963_parallel*.h
+//  files assume).
 // ---------------------------------------------------------------------------
-#if defined(DISPLAY_DRIVER_SSD1963_PARALLEL) || defined(DISPLAY_DRIVER_RA8876_TFTESPI)
+#if defined(DISPLAY_DRIVER_SSD1963_PARALLEL) || defined(DISPLAY_DRIVER_SSD1963_PARALLEL_V30)
+
+#include <SPI.h>
+#include <TFT_eSPI.h>
+
+#define TT_Display          TFT_eSPI
+#define DISPLAY_DECLARE_TFT TFT_eSPI tft
+
+// ---------------------------------------------------------------------------
+//  RA8876 SPI mode — TFT_eSPI_RA8876 wrapper (unaffected by the above; this
+//  board/driver combo was not part of the regression).
+// ---------------------------------------------------------------------------
+#elif defined(DISPLAY_DRIVER_RA8876_TFTESPI)
 
 #include <SPI.h>
 #include <TFT_eSPI_RA8876.h>
@@ -161,6 +189,18 @@ public:
         // Ensure display output is enabled with correct pixel-clock polarity.
         // DPCR (0x12): XPCLK_INV=1 (bit7), DISPLAY_ON=1 (bit6), RGB=0 (bits1:0)
         displayOn(true);
+
+        // fillScreen() (RA8876_common::fillScreen) clears only the scroll/
+        // margin window (_scrollXL/_scrollYT/_scrollXR/_scrollYB) — it calls
+        // drawSquareFill() directly, bypassing our hardened TT_Display::fillRect()
+        // override entirely. Nothing else in this codebase ever sets that
+        // window, so it's whatever the base RA8876_common class's constructor
+        // assumed (not necessarily this panel's actual 1024x600 size). If it's
+        // smaller than the real panel, fillScreen() leaves a region of old/
+        // residual GRAM content untouched and visible — explicitly setting it
+        // here guarantees fillScreen() always clears the full physical panel.
+        setMargins(0, 0, 1024, 600);
+
         return true;
     }
 
@@ -201,6 +241,17 @@ public:
     // fontHeight(font): returns pixel height of the named font.
     // Mirrors the TFT_eSPI method of the same name.
     int16_t fontHeight(uint8_t font) { return _fontHeight(font); }
+
+    // ---- fillScreen override — route through our hardened fillRect() -------
+    // RA8876_common::fillScreen() calls drawSquareFill() directly against the
+    // scroll/margin window, bypassing TT_Display::fillRect() (and its
+    // degenerate-case guards below) entirely. It was never independently
+    // verified to work reliably at full-panel size on this chip — given how
+    // many *other* GE operations here are documented as flaky for specific
+    // coordinate combinations, an unverified full-screen-sized raw GE call is
+    // exactly the kind of thing that could silently leave part of the panel
+    // un-cleared. Route it through the one fill path we've actually tested.
+    void fillScreen(uint16_t color) { fillRect(0, 0, _width, _height, color); }
 
     // ---- fillRect guard — rejects degenerate dimensions before the GE ------
     // The RA8876 DRAW_SQUARE_FILL GE (DCR1 = 0xE0) hangs when:
@@ -299,8 +350,8 @@ private:
 // ---------------------------------------------------------------------------
 #else
   #error "No display driver defined. Set DISPLAY_DRIVER_SSD1963_PARALLEL, \
-DISPLAY_DRIVER_RA8876_TFTESPI, or DISPLAY_DRIVER_RA8876_NATIVE before including \
-BoardSettings.h."
+DISPLAY_DRIVER_SSD1963_PARALLEL_V30, DISPLAY_DRIVER_RA8876_TFTESPI, or \
+DISPLAY_DRIVER_RA8876_NATIVE before including BoardSettings.h."
 #endif  // display mode selection
 
 /*

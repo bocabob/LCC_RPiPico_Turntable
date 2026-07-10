@@ -138,6 +138,48 @@ static const openlcb_config_t openlcb_config = {
     .on_broadcast_time_changed       = &Callbacks_on_broadcast_time_time_changed,
 };
 
+// Factory-reset gesture: hold Blue + Gold buttons for 2s at boot to wipe and
+// reinitialize configuration memory to CDI defaults. Does NOT touch the
+// protected NVM identity region above CONFIG_MEM_SIZE (§7.1) — node ID
+// survives this reset, same as it survives the 'r'/'i' serial commands.
+// No-op if BLUE_BUTTON_PIN/GOLD_BUTTON_PIN are unavailable on this board's
+// active breakout combo (shared with another function) — see NodeConfig.h.
+// Also a no-op if BUTTONS_SHARE_I2C_PINS is defined (v2.4 board): pinMode()
+// on these pins after I2C has already claimed them for the NVM EEPROM would
+// reclaim them from the I2C peripheral and break all NVM access for the
+// rest of the boot.
+// Standard design assumption (per LCC_NODE_STANDARD.md): this gesture check
+// runs pre-init on Core 0, before Core 1's setup1() claims any pins for
+// display/touch/stepper use (setup1() busy-waits on node_initiated, which
+// is only set true at the end of setup(), after this call) — so reading
+// the buttons here is always safe even when a combo permanently repurposes
+// one or both pins afterward (e.g. GOLD_BUTTON_PIN / gp28 shared with
+// DISPLAY_DC_PIN on the v3.0 parallel-display combo).
+void _check_factory_reset_gesture(void) {
+#if defined(BLUE_BUTTON_PIN) && defined(GOLD_BUTTON_PIN) && !defined(BUTTONS_SHARE_I2C_PINS)
+  pinMode(BLUE_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(GOLD_BUTTON_PIN, INPUT_PULLUP);
+
+  if (digitalRead(BLUE_BUTTON_PIN) != LOW || digitalRead(GOLD_BUTTON_PIN) != LOW) {
+    return;  // not held — normal boot
+  }
+
+  Serial.println("Blue+Gold held at boot — hold 2s to wipe and reinitialize NVM (release to cancel)...");
+  uint32_t startMs = millis();
+  while (digitalRead(BLUE_BUTTON_PIN) == LOW && digitalRead(GOLD_BUTTON_PIN) == LOW) {
+    if (millis() - startMs >= 2000) {
+      Serial.println("Wiping configuration memory to factory defaults...");
+      ConfigMemHelper_reset_config_mem();
+      ConfigMemHelper_reset_and_write_default(OpenLcbUserConfig_node_id);
+      Serial.println("NVM wiped and reinitialized. Continuing boot...");
+      return;
+    }
+    delay(20);
+  }
+  Serial.println("Released early — factory reset cancelled.");
+#endif
+}
+
 void _check_for_nvm_initialization(void) {
 
   Serial.println("Checking for initialized NVM");
@@ -370,6 +412,8 @@ void setup() {
   OpenLcbUserConfig_node_id = OpenLcbConfig_create_node(node_id, &OpenLcbUserConfig_node_parameters);
   // do this after initialization or the I2C will not be initialized
 
+  _check_factory_reset_gesture();
+
   _check_for_nvm_initialization();
 
   // Read the NVM into the local data structures
@@ -436,13 +480,13 @@ void setup1() {
   displayConfig();  // Display Turntable configuration
   notice(" ");
   notice("Display configured");
-  
+
   setupStepperDriver();   // Set up the stepper driver
   notice("Stepper set up");
   lastRunningState = isStepperRunning();
-  
+
 	notice("Turntable Program Started");
-	
+
   setupComplete = true;
   Serial.println(F("Setup zero complete"));
   // Note: setup1Complete was removed — it was declared false and never set true,
@@ -534,7 +578,16 @@ void loop() {
       case 'Y':
         if (NodeIdentity_provision_pending()) {
           if (NodeIdentity_confirm_provision()) {
-            Serial.println("Node identity written. Rebooting...");
+            // Config memory (including node-ID-based default event IDs) was
+            // written using whatever ID was active at the time — NODE_ID_DEFAULT
+            // if this is a fresh board provisioned before its first boot's
+            // defaults were ever written. Wipe to 0xFF (fresh) so
+            // _check_for_nvm_initialization() rewrites the defaults next boot
+            // using the just-provisioned real ID. Safe: the identity block
+            // itself lives in the protected NVM region above CONFIG_MEM_SIZE,
+            // untouched by this reset.
+            ConfigMemHelper_reset_config_mem();
+            Serial.println("Node identity written. Rebooting to regenerate event IDs from the new node ID...");
             delay(100);
             rp2040.reboot();
           } else {

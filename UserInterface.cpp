@@ -263,8 +263,6 @@ void setupDisplay()
   // SPI1 pin mapping must be configured before TFT_eSPI_RA8876 calls begin().
   // The TFT_eSPI library reads USER_SETUP pin defines at compile time, but
   // the RP2040 hardware SPI mux must also be set at runtime on Philhower core.
-  Serial.println(F("DIAG: configuring SPI1 pins"));
-  Serial.flush();
   // DISPLAY_SDI = GPIO8  = SPI1 RX (MISO from RP2040 perspective)
   // DISPLAY_SDO = GPIO11 = SPI1 TX (MOSI from RP2040 perspective)
   // Philhower panics if setTX/setRX is called with a pin whose hardware
@@ -275,12 +273,8 @@ void setupDisplay()
   // Note: do NOT call SPI1.setCS() here — TFT_eSPI manages CS as a GPIO;
   // assigning it as a hardware-CS pin can prevent TFT_eSPI from driving it.
   SPI1.begin();
-  Serial.println(F("DIAG: SPI1.begin() done"));
-  Serial.flush();
 #endif
 
-  Serial.println(F("DIAG: calling tft.init()"));
-  Serial.flush();
 #if defined(DISPLAY_DRIVER_RA8876_NATIVE)
   // Native wrapper: init() returns bool — fail fast if chip doesn't respond.
   _displayOK = tft.init();
@@ -291,22 +285,14 @@ void setupDisplay()
     // Touch controller is on the same board; skip it too.
     return;
   }
-  Serial.println(F("DIAG: tft.init() returned OK"));
 #else
   // TFT_eSPI modes: init() is void — hangs if chip absent, succeeds otherwise.
   tft.init();
   _displayOK = true;
-  Serial.println(F("DIAG: tft.init() returned"));
 #endif
-  Serial.flush();
 
   tft.setRotation(ROTATION);
-  Serial.println(F("DIAG: setRotation done"));
-  Serial.flush();
-
   tft.fillScreen(TFT_BLACK);
-  Serial.println(F("DIAG: fillScreen done"));
-  Serial.flush();
 
   tft.setTextDatum(TC_DATUM);
   tft.setTextColor(TFT_WHITE, TFT_BLACK);
@@ -315,19 +301,27 @@ void setupDisplay()
 // touch.setCal(3668, 365, 3422, 258, 480, 320, 1);
 // touch.setCal(3671, 356, 3459, 297, 480, 320, 1);
 
-  Serial.println(F("DIAG: calling tp.init()"));
-  Serial.flush();
   tp.init(TOUCH_SDA, TOUCH_SCL, TOUCH_RST, TOUCH_INT, 400000, &TOUCH_WIRE);
   int iType = tp.sensorType();
   Serial.printf("Sensor type = %s\n", szNames[iType]);
-  Serial.flush();
+
+#if defined(TOUCH_RST) && defined(DISPLAY_RST) && (TOUCH_RST == DISPLAY_RST)
+  // TOUCH_RST and DISPLAY_RST share the same physical pin on this breakout
+  // (see NodeConfig.h). tp.init()'s chip-type auto-detection (BBCapTouch::reset())
+  // toggles that pin with real 100ms-low/250ms-high reset pulses while probing
+  // for GT911/CHSC6540/AXS15231 — which also resets the RA8876/LT7381 display
+  // controller back to power-on defaults, undoing everything tft.init() just
+  // configured. Without this re-init, every subsequent draw call succeeds (no
+  // error, no hang) but is invisible, because the display chip's own
+  // timing/enable registers were silently reset back to power-on defaults.
+  tft.init();
+  tft.setRotation(ROTATION);
+#endif
 
   Serial.println("bb_captouch Touch: Ready");
   // tp.begin();
 
-  int result = tp.setOrientation(TOUCH_ROTATION, HRES, VRES);
-  Serial.printf("DIAG: tp.setOrientation result = %d\n", result);
-  Serial.flush();
+  tp.setOrientation(TOUCH_ROTATION, HRES, VRES);
 
   // pinMode(TFT_BL, OUTPUT);    // lcd light
   // digitalWrite(TFT_BL, LOW);
@@ -343,12 +337,6 @@ void setupDisplay()
   tft.println(VERSION);
   tft.print(F("by Bob Gamble"));
 
-  String text;
-  text+= "Screen rotation = ";
-  text+= tft.getRotation();
-  char buffer[30];
-  text.toCharArray(buffer,30);
-  tft.drawString(buffer, 350, 250, 2);
 
   activeScreen = 0;
 
@@ -904,7 +892,14 @@ setHotSpot8(2,CPtShackX, CPtShackY, SPt1X, SPt1Y,SPt2X, SPt2Y, SPt3X, SPt3Y);
 
 tft.setTextDatum(ML_DATUM);  // Set text plotting reference datum to Middle Left
 tft.setTextPadding(tft.textWidth("9999999999999999999999999", 2)); // get the width of the text in pixels
-tft.drawString(TrackName[ConfigMemHelper_config_data.CurrentTrack], 80, VRES/2, 2);  // draw the name of the track
+// Defensive clamp — CurrentTrack is now sanitized in ConfigMemHelper_read(),
+// but this is the exact call site that rendered stray CDI text out of
+// adjacent flash when it wasn't, so it gets its own belt-and-suspenders guard.
+{
+  uint8_t safeTrack = ConfigMemHelper_config_data.CurrentTrack;
+  if (safeTrack > MAX_TRACKS - 1) safeTrack = 0;
+  tft.drawString(TrackName[safeTrack], 80, VRES/2, 2);  // draw the name of the track
+}
 }
 
 void drawShack(float angle)
@@ -945,7 +940,16 @@ void drawTracks()
 {
     _railcom_dirty = false;
 
-  for (int i = 1; i <= ConfigMemHelper_config_data.attributes.TrackCount; i++) {
+  // Defensive clamp — this reads attributes.TrackCount directly from NVM-
+  // sourced data, independent of any clamp applied elsewhere (e.g.
+  // Set_Application_Values_From_Config()). Tracks[]/tracks[] are sized
+  // MAX_TRACKS; reading/drawing past that walks into adjacent memory and
+  // renders whatever garbage is there as text (see LCC_NODE_STANDARD.md
+  // §6.1's fillScreen gotcha note — this was the actual cause of stray
+  // CDI-looking text appearing once at boot).
+  uint8_t trackCount = ConfigMemHelper_config_data.attributes.TrackCount;
+  if (trackCount > MAX_TRACKS - 1) trackCount = MAX_TRACKS - 1;
+  for (int i = 1; i <= trackCount; i++) {
     if (fullTurnSteps != 0) {
       drawTrack(i, ((ConfigMemHelper_config_data.Tracks[i].trackFront*360)/fullTurnSteps));
     }

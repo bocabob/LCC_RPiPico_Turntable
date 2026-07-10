@@ -323,8 +323,8 @@ uint16_t RPiPicoDrivers_config_mem_write(openlcb_node_t *openlcb_node, uint32_t 
   #if defined(USE_TILLAART) && defined(EXTERNAL_EEPROM)
   if (bytes_written != 0) {   // S_OK
     Serial.print(bytes_written, HEX);
-    Serial.println("  ConfigMemory Write Failed.  Did you define the correct CONFIG_MEM_SIZE in rpi_pico_drivers.h, or correct I2C pins"); 
-    return bytes_written;     
+    Serial.println("  ConfigMemory Write Failed.  Did you define the correct CONFIG_MEM_SIZE in rpi_pico_drivers.h, or correct I2C pins");
+    return bytes_written;
     }
   #else
    if (!bytes_written) {   // FALSE
