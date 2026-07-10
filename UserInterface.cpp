@@ -235,20 +235,22 @@ void TurntableCallback(uint16_t callin) {
   }
 }
 
-// PAIRED-EVENT EXPERIMENT: called directly from callbacks.cpp (not routed through
-// TurntableCallback()) for both the Identified path and the live-PCER path, since
-// the two need different interpretation:
+// PAIRED-EVENT EXPERIMENT v2: called directly from callbacks.cpp (not routed
+// through TurntableCallback()) for both the Identified path and the live-PCER
+// path, since the two need different interpretation:
 //   - Identified path: `status` is the real SET/CLEAR/UNKNOWN carried by the
 //     Producer Identified message (used for LCC-login state recovery).
 //   - Live PCER path: callbacks.cpp always passes EVENT_STATUS_SET here, because
-//     the mere fact that a PC Event Report for this specific event (DoorOpenConfirmed
-//     or DoorClosedConfirmed) arrived at all IS the state signal — unlike the old
-//     single ambiguous ToggleDoor event, there's no separate polarity bit to read
-//     (a bare PC Event Report never carries one at the protocol level), and none is
-//     needed: Roundhouse only ever sends the one event that's currently true.
+//     the mere fact that a PC Event Report for this specific event (eidDoorOpen
+//     or eidDoorClose) arrived at all IS the state signal — unlike the old
+//     single ambiguous ToggleDoor event, there's no separate polarity bit to
+//     read (a bare PC Event Report never carries one at the protocol level),
+//     and none is needed: Roundhouse only ever sends the one event that's
+//     currently true (each event now does double duty as both the command
+//     Turntable sends and the confirmation Roundhouse echoes back).
 //
-// isOpenEvent: true if this is the door's eidDoorOpenConfirmed slot, false if it's
-// eidDoorClosedConfirmed.
+// isOpenEvent: true if this is the door's eidDoorOpen slot, false if it's
+// eidDoorClose.
 void TurntableDoorConfirmed(int doorIdx, bool isOpenEvent, event_status_enum status) {
   if (doorIdx < 0 || doorIdx >= ConfigMemHelper_config_data.attributes.DoorCount) return;
 

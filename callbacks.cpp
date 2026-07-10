@@ -56,9 +56,9 @@ extern void TurntableCallback(uint16_t callin);
 extern void TurntableDoorConfirmed(int doorIdx, bool isOpenEvent, event_status_enum status);  // PAIRED-EVENT EXPERIMENT
 extern config_mem_t ConfigMemHelper_config_data;
 
-// PAIRED-EVENT EXPERIMENT: shared door-index-range math for both callback paths
-// below. Doors now use 2 consumer slots each (eidDoorOpenConfirmed,
-// eidDoorClosedConfirmed), registered consecutively per door — see
+// PAIRED-EVENT EXPERIMENT v2: shared door-index-range math for both callback
+// paths below. Doors now use 2 consumer slots each (eidDoorOpen, eidDoorClose),
+// registered consecutively per door — see
 // LCC_RPiPico_Turntable.ino's _register_consumers().
 static int _door_first_index() {
   return NUM_TABLE_EVENTS + (int)ConfigMemHelper_config_data.attributes.TrackCount * 3 + 3;

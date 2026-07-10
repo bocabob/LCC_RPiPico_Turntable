@@ -66,14 +66,15 @@ typedef struct{
     struct {
       char doorName[16];        // description of this Door
       char doorShort[5];        // short description of this Door
-      event_id_t eidToggle;       // producer Toggle door position eventID (command only — see PAIRED-EVENT EXPERIMENT note)
-      // PAIRED-EVENT EXPERIMENT: consumer counterparts of Roundhouse's new
-      // producer-only DoorOpenConfirmed/DoorClosedConfirmed events. Set these
-      // (via CDI/JMRI) to the same event IDs as the matching fields on the
-      // Roundhouse node. Replaces relying on eidToggle's own PC report (which
-      // carries no open/closed polarity) for live door-state sync.
-      event_id_t eidDoorOpenConfirmed;    // consumer: Roundhouse reports this door confirmed open
-      event_id_t eidDoorClosedConfirmed;  // consumer: Roundhouse reports this door confirmed closed
+      // PAIRED-EVENT EXPERIMENT v2: eidDoorOpen/eidDoorClose replace the
+      // original eidToggle plus the intermediate eidDoorOpenConfirmed/
+      // eidDoorClosedConfirmed pair. Each is registered as BOTH producer
+      // (Turntable commands the action by producing it) and consumer
+      // (Turntable displays the confirmed state Roundhouse reports back on
+      // the same event) — set these (via CDI/JMRI) to the same event IDs as
+      // the matching DoorOpen/DoorClose fields on the Roundhouse node.
+      event_id_t eidDoorOpen;    // producer: command to open — consumer: confirmed open
+      event_id_t eidDoorClose;   // producer: command to close — consumer: confirmed closed
       uint8_t TrackLocation;    // int8 number of the track where the door is located
     } doors[MAX_DOORS];
 // Lights parameters

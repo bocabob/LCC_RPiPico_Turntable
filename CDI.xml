@@ -107,9 +107,8 @@
                 <repname>Door 1</repname>
                 <string size='16'><name>Description</name></string>
                 <string size='5'><name>Short Name</name></string>   
-                <eventid><name>Toggle Door (P)</name></eventid>
-                <eventid><name>Door Open Confirmed (C)</name><description>Received when Roundhouse confirms this door is open (PAIRED-EVENT EXPERIMENT)</description></eventid>
-                <eventid><name>Door Closed Confirmed (C)</name><description>Received when Roundhouse confirms this door is closed (PAIRED-EVENT EXPERIMENT)</description></eventid>
+                <eventid><name>Door Open (P+C)</name><description>Produced: command to open. Consumed: confirmed open. (PAIRED-EVENT EXPERIMENT v2)</description></eventid>
+                <eventid><name>Door Close (P+C)</name><description>Produced: command to close. Consumed: confirmed closed. (PAIRED-EVENT EXPERIMENT v2)</description></eventid>
                 <int size='1'>
                     <name>Track Number</name>
                     <description>The track number associated with the door</description>
