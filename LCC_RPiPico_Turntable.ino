@@ -205,6 +205,16 @@ void _check_for_nvm_initialization(void) {
   }
 }
 
+// PAIRED-EVENT EXPERIMENT v2: invert an EVENT_STATUS_ value (SET<->CLEAR),
+// leaving EVENT_STATUS_UNKNOWN as UNKNOWN. Used to derive eidDoorClose's
+// initial registered producer status as the logical opposite of
+// producer_status[2+i] (which tracks SET=open/CLEAR=closed).
+static event_status_enum _invert_event_status(event_status_enum s) {
+  if (s == EVENT_STATUS_SET) return EVENT_STATUS_CLEAR;
+  if (s == EVENT_STATUS_CLEAR) return EVENT_STATUS_SET;
+  return EVENT_STATUS_UNKNOWN;
+}
+
 void _register_producers(void) {
   int index = 0;
   OpenLcbApplication_clear_producer_eventids(OpenLcbUserConfig_node_id);
@@ -213,12 +223,19 @@ void _register_producers(void) {
   index++;
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.CloseAll), ConfigMemHelper_config_data.producer_status[index]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
   index++;
+  // PAIRED-EVENT EXPERIMENT v2: register both eidDoorOpen and eidDoorClose as
+  // producers — Turntable commands the door by producing whichever one it
+  // sends (see produceDoor()), and this same registration lets Roundhouse (as
+  // consumer) receive it. producer_status[2+i] already tracks SET=open/
+  // CLEAR=closed, so eidDoorOpen mirrors it directly and eidDoorClose mirrors
+  // its inverse.
   for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
-     OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidToggle), ConfigMemHelper_config_data.producer_status[index+i]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
+     OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidDoorOpen), ConfigMemHelper_config_data.producer_status[index+i]);
+     OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidDoorClose), _invert_event_status(ConfigMemHelper_config_data.producer_status[index+i]));
   }
   index += ConfigMemHelper_config_data.attributes.DoorCount;
   OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidInterior), ConfigMemHelper_config_data.producer_status[index]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
-  OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior), ConfigMemHelper_config_data.producer_status[index+1]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID 
+  OpenLcbApplication_register_producer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidExterior), ConfigMemHelper_config_data.producer_status[index+1]);  // need to read the state from the NVM to know if it is on/off/unknown when registering the producer event ID
 }
 
 bool produceLightIn()
@@ -262,15 +279,27 @@ bool produceCloseAll()
   return false;
 }
 
+// PAIRED-EVENT EXPERIMENT v2: send an explicit Open or Close command based on
+// the currently known state, instead of a blind toggle. This is self-correcting
+// even if the displayed state is stale: an explicit command always means the
+// same thing regardless of what Turntable currently believes, whereas a toggle
+// is relative to the door's actual physical state and can move it the wrong
+// way if the two have ever diverged.
 bool produceDoor(int servo)
 {
-  if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.doors[servo].eidToggle))) {
-  // Optimistically toggle the local producer_status before the Roundhouse confirms
+  bool commandOpen = (ConfigMemHelper_config_data.producer_status[2 + servo] != EVENT_STATUS_SET);
+  event_id_t targetEvent = commandOpen
+      ? ConfigMemHelper_config_data.attributes.doors[servo].eidDoorOpen
+      : ConfigMemHelper_config_data.attributes.doors[servo].eidDoorClose;
+
+  if (OpenLcbApplication_send_event_pc_report(OpenLcbUserConfig_node_id, swap_endian64(targetEvent))) {
+  // Optimistically set the local producer_status before the Roundhouse confirms
   // the move.  If the CAN message is lost or the servo fails, the Turntable display
-  // will diverge from the actual door state.  The Roundhouse's "Producer Identified"
-  // broadcasts at the next LCC login are the recovery mechanism that re-syncs the
-  // display to ground truth.
-  ToggleProducerEventStatus(2 + servo);
+  // will diverge from the actual door state.  Roundhouse's live confirmation PCER
+  // (or the next LCC login's Producer Identified broadcast) is the recovery
+  // mechanism that re-syncs the display to ground truth.
+  ConfigMemHelper_config_data.producer_status[2 + servo] = commandOpen ? EVENT_STATUS_SET : EVENT_STATUS_CLEAR;
+  _config_dirty = true;
 
   return true;
   }
@@ -350,14 +379,20 @@ void _register_consumers(void) {
   OpenLcbApplication_register_consumer_eventid(OpenLcbUserConfig_node_id, swap_endian64(ConfigMemHelper_config_data.attributes.eidLowLuminosity_On), ConfigMemHelper_config_data.consumer_status[index]);
   index++;
 
-  // Register the Roundhouse door ToggleDoor event IDs as consumers on the Turntable.
-  // This allows the Turntable to receive "Consumer Identified" messages from the Roundhouse
-  // during LCB login, carrying the NVM-restored open/closed state for each door, so the
-  // Turntable display is synchronised at startup without any user interaction.
+  // PAIRED-EVENT EXPERIMENT v2: register eidDoorOpen/eidDoorClose as consumers
+  // too (in addition to the producer registration above) — Turntable displays
+  // whichever one Roundhouse confirms back on the same event ID, live via a
+  // PC Event Report (the mere arrival of one specific event IS the state
+  // signal here, see TurntableDoorConfirmed()) and at LCC login via the
+  // Producer Identified handshake.
   for (int i = 0; i < ConfigMemHelper_config_data.attributes.DoorCount; i++) {
     OpenLcbApplication_register_consumer_eventid(
         OpenLcbUserConfig_node_id,
-        swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidToggle),
+        swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidDoorOpen),
+        ConfigMemHelper_config_data.consumer_status[index++]);
+    OpenLcbApplication_register_consumer_eventid(
+        OpenLcbUserConfig_node_id,
+        swap_endian64(ConfigMemHelper_config_data.attributes.doors[i].eidDoorClose),
         ConfigMemHelper_config_data.consumer_status[index++]);
   }
 

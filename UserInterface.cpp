@@ -230,31 +230,51 @@ void TurntableCallback(uint16_t callin) {
           default:
             break;
         }
-    } else {
-      // Door state sync: the Roundhouse broadcasts a "Producer Identified" for each
-      // door during LCC login, carrying the NVM-restored open/closed state.
-      // Mirror the received state into producer_status[] so drawDoorButton() and
-      // drawTrack() reflect the correct colour without any user interaction.
-      //
-      // Note: _config_dirty is NOT set here.  The Turntable does not independently
-      // persist door display state to its own NVM.  The Roundhouse is the single
-      // authoritative source; the Turntable always re-syncs from the Roundhouse's
-      // "Producer Identified" broadcasts at each LCC login.  If the Turntable
-      // power-cycles while the Roundhouse is still offline, door indicators will
-      // show yellow (UNKNOWN) until the Roundhouse comes back and completes login.
-      int doorIdx = (int)index - 3;  // 0-based door number
-      if (doorIdx >= 0 && doorIdx < ConfigMemHelper_config_data.attributes.DoorCount) {
-        // Mirror Roundhouse producer state into the Turntable's producer_status[] slot
-        ConfigMemHelper_config_data.producer_status[2 + doorIdx] = ConfigMemHelper_config_data.consumer_status[callin];
-        // Mark every track whose door indicator belongs to this servo dirty.
-        // updateDisplay() will pick the right draw call for the active screen.
-        for (int t = 1; t <= ConfigMemHelper_config_data.attributes.TrackCount; t++) {
-          if (ConfigMemHelper_config_data.Tracks[t].doorPresent && ConfigMemHelper_config_data.Tracks[t].servoNumber == doorIdx) {
-            markTrackDirty(t);   // door indicator on the radial track line (screen 1)
-            markDoorDirty(t);    // door button on the button page (screen 2)
-          }
-        }
-      }
+    }
+    // PAIRED-EVENT EXPERIMENT: door-confirmed events are no longer handled here —
+    // see TurntableDoorConfirmed() below. Both callbacks.cpp callers intercept the
+    // door index range before ever calling TurntableCallback(), since interpreting
+    // them correctly needs different logic per path (see that function's comment).
+  }
+}
+
+// PAIRED-EVENT EXPERIMENT v2: called directly from callbacks.cpp (not routed
+// through TurntableCallback()) for both the Identified path and the live-PCER
+// path, since the two need different interpretation:
+//   - Identified path: `status` is the real SET/CLEAR/UNKNOWN carried by the
+//     Producer Identified message (used for LCC-login state recovery).
+//   - Live PCER path: callbacks.cpp always passes EVENT_STATUS_SET here, because
+//     the mere fact that a PC Event Report for this specific event (eidDoorOpen
+//     or eidDoorClose) arrived at all IS the state signal — unlike the old
+//     single ambiguous ToggleDoor event, there's no separate polarity bit to
+//     read (a bare PC Event Report never carries one at the protocol level),
+//     and none is needed: Roundhouse only ever sends the one event that's
+//     currently true (each event now does double duty as both the command
+//     Turntable sends and the confirmation Roundhouse echoes back).
+//
+// isOpenEvent: true if this is the door's eidDoorOpen slot, false if it's
+// eidDoorClose.
+void TurntableDoorConfirmed(int doorIdx, bool isOpenEvent, event_status_enum status) {
+  if (doorIdx < 0 || doorIdx >= ConfigMemHelper_config_data.attributes.DoorCount) return;
+
+  // Note: _config_dirty is NOT set here.  The Turntable does not independently
+  // persist door display state to its own NVM.  The Roundhouse is the single
+  // authoritative source for door state.
+  if (status == EVENT_STATUS_SET) {
+    ConfigMemHelper_config_data.producer_status[2 + doorIdx] = isOpenEvent ? EVENT_STATUS_SET : EVENT_STATUS_CLEAR;
+  } else if (status == EVENT_STATUS_UNKNOWN) {
+    ConfigMemHelper_config_data.producer_status[2 + doorIdx] = EVENT_STATUS_UNKNOWN;
+  }
+  // A CLEAR on one event of the pair is not acted on — the corresponding SET on
+  // its opposite (already handled independently, whether now or on a later
+  // message) is what carries the meaningful signal.
+
+  // Mark every track whose door indicator belongs to this servo dirty.
+  // updateDisplay() will pick the right draw call for the active screen.
+  for (int t = 1; t <= ConfigMemHelper_config_data.attributes.TrackCount; t++) {
+    if (ConfigMemHelper_config_data.Tracks[t].doorPresent && ConfigMemHelper_config_data.Tracks[t].servoNumber == doorIdx) {
+      markTrackDirty(t);   // door indicator on the radial track line (screen 1)
+      markDoorDirty(t);    // door button on the button page (screen 2)
     }
   }
 }

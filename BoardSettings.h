@@ -206,7 +206,7 @@ const uint8_t PixelPin = NeoPixel_PinA;  // pin for the data line, ignored for E
 
 #define IndexOpenAll NUM_TABLE_EVENTS + NUM_TRACK_EVENTS // PEID(OpenAll) OpenLcb.produce(IndexOpenAll);
 #define IndexCloseAll IndexOpenAll + 1 // PEID(CloseAll) OpenLcb.produce(IndexCloseAll);
-#define IndexDoor1 IndexCloseAll + 1 // PEID(doors[s].eidToggle) OpenLcb.produce(IndexDoor1 + i);
+#define IndexDoor1 IndexCloseAll + 1 // PEID(doors[s].eidDoorOpen/eidDoorClose) OpenLcb.produce(IndexDoor1 + i);
 #define IndexLightIn  NUM_TABLE_EVENTS + NUM_TRACK_EVENTS + NUM_DOOR_EVENTS + 1   // Light events  PEID(eidInterior) OpenLcb.produce(IndexLightIn);
 #define IndexLightEx IndexLightIn + 1 // PEID(eidExterior) OpenLcb.produce(IndexLightEx);
 
