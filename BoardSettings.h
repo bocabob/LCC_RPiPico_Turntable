@@ -48,6 +48,22 @@
 #endif
 
 // --------------------------------------------
+//  SNIP hardware_version string — derived from the board macro above so it
+//  can't drift from the board actually selected. See LCC_NODE_STANDARD.md §7.3.
+// --------------------------------------------
+#if defined(LCC_BOARD_STEPPER_V24)
+  #define BOARD_HARDWARE_VERSION_STR "2.4"
+#elif defined(LCC_BOARD_STEPPER_V27)
+  #define BOARD_HARDWARE_VERSION_STR "2.7"
+#elif defined(LCC_BOARD_STEPPER_V29)
+  #define BOARD_HARDWARE_VERSION_STR "2.9"
+#elif defined(LCC_BOARD_STEPPER_V295)
+  #define BOARD_HARDWARE_VERSION_STR "2.95"
+#elif defined(LCC_BOARD_NODE_V30)
+  #define BOARD_HARDWARE_VERSION_STR "3.0"
+#endif
+
+// --------------------------------------------
 //  Display config headers — included HERE (sketch root) so that relative paths
 //  like "display_configs/..." resolve correctly regardless of which board header
 //  set the driver define.  Board headers only set the DISPLAY_DRIVER_* define;
