@@ -37,6 +37,9 @@
 #include "config_mem_helper.h"
 #include "src/openlcb/openlcb_application_dcc_detector.h"
 #include "callbacks.h"
+#if !defined(DISPLAY_DRIVER_RA8876_NATIVE)
+#include "NotoSansBold36Font.h"   // compiled-in smooth font for the fast clock — see drawFastClock()
+#endif
 
 extern openlcb_node_t *OpenLcbUserConfig_node_id;
 
@@ -421,8 +424,49 @@ tft.drawString(string, x+(length/2), y+4, 2);
 tft.setTextPadding(0); // set to zero
 }
 
+// Last-known fast clock value, cached so the home page can redraw it after
+// anything else wipes that screen region (page entry fillScreen(), or the
+// turntable bridge's fillCircle() erase — both land on top of the clock's
+// draw area at (5, VRES/2-30) since drawFastClock() itself is only invoked
+// reactively from Callbacks_on_broadcast_time_time_changed() and has no
+// periodic redraw of its own). See LCC_NODE_STANDARD.md-style dirty-region
+// gotchas: this is the same "reactive draw stomped by an unrelated redraw"
+// pattern as the CurrentTrack/drawBridge() bug documented there.
+static int  _lastFastClockHour   = -1;
+static int  _lastFastClockMinute = -1;
+static bool _lastFastClockValid  = false;
+
+// Re-issue the last known fast clock value. No-op if none has arrived yet.
+// Call this after any home-page redraw that may have erased the clock's
+// screen region (page draw, bridge animation, dirty-flag bridge service).
+//
+// force=true always redraws immediately (used right after a page draw,
+// which is a rare, one-shot event). force=false (the default) throttles to
+// at most once per _CLOCK_REDRAW_MIN_MS — needed because the smooth-font
+// path's loadFont()/unloadFont() parse the font's glyph metrics table from
+// flash on every call, and the bridge-motion callers
+// (updateBridgeAnimation()/updateDisplay()) can otherwise fire many times
+// per second while the turntable is actively rotating.
+void redrawFastClockIfKnown(bool force = false)
+{
+  if (!_lastFastClockValid) return;
+
+  static const uint32_t _CLOCK_REDRAW_MIN_MS = 500;
+  static uint32_t _lastRedrawMs = 0;
+  uint32_t nowMs = millis();
+
+  if (!force && (nowMs - _lastRedrawMs) < _CLOCK_REDRAW_MIN_MS) return;
+
+  _lastRedrawMs = nowMs;
+  drawFastClock(_lastFastClockHour, _lastFastClockMinute);
+}
+
 void drawFastClock(int hour, int minute)
 {
+  _lastFastClockHour   = hour;
+  _lastFastClockMinute = minute;
+  _lastFastClockValid  = true;
+
   tft.setTextDatum(ML_DATUM);  // Set text plotting reference datum to Top Centre (TC)
   // tft.setTextPadding(100); // get the width of the text in pixels
   // tft.drawString("Clock", HRES/2, VRES/2, 4);
@@ -445,12 +489,44 @@ void drawFastClock(int hour, int minute)
     TimeText+= minute;
     char buffer[30];
     TimeText.toCharArray(buffer,30);
+    // Font "5" is a real, intentionally-added font (16×32 RA8876 CGROM,
+    // between Font 4's 26px and Font 6-8's 48-75px) — but it only exists in
+    // DisplayDriver.cpp's TT_Display::_selectFont(), which is compiled in
+    // only for DISPLAY_DRIVER_RA8876_NATIVE. This combo (and the Parallel
+    // combo, which uses vanilla TFT_eSPI) instead get TFT_eSPI_RA8876's own
+    // font table, where slot 5 is an unused stub (null glyph data, height 0)
+    // — that's why this text silently rendered nothing here.
+    //
+    // Neither TFT_eSPI nor TFT_eSPI_RA8876 ship a ~32px full-alphanumeric
+    // bitmap font, and 2x-scaling a smaller bitmap font (e.g. Font 2) looks
+    // pixelated (nearest-neighbour). Instead use a real anti-aliased 32px
+    // smooth font, compiled straight into flash as a PROGMEM byte array
+    // (NotoSansBold36Font.h — same "asset embedded as a C array" pattern
+    // used elsewhere in this codebase, e.g. the CDI byte array) — no
+    // filesystem or upload step needed. Loaded/drawn/unloaded narrowly
+    // around just this draw call so bitmap fonts used everywhere else
+    // (buttons, tracks, etc.) are unaffected.
+#if defined(DISPLAY_DRIVER_RA8876_NATIVE)
     {
       int ty = (VRES/2)-30;
       int fh = tft.fontHeight(5);
       tft.fillRect(5, ty - fh/2, tft.textWidth("Fast Clock: 00:00", 5) + 10, fh, TFT_BLACK);
+      tft.drawString(buffer, 5, (VRES/2)-30, 5);
     }
-    tft.drawString(buffer, 5, (VRES/2)-30, 5);
+#else
+    {
+      tft.loadFont(NotoSansBold36);
+      int ty = (VRES/2)-30;
+      int fh = tft.fontHeight();
+      // Erase against the placeholder's width, not buffer's — hour isn't
+      // zero-padded, so the string is narrower for single-digit hours than
+      // for double-digit ones; erasing only to the current frame's width
+      // would leave stale pixels from a wider previous frame.
+      tft.fillRect(5, ty - fh/2, tft.textWidth("Fast Clock: 00:00") + 20, fh, TFT_BLACK);
+      tft.drawString(buffer, 5, (VRES/2)-30);
+      tft.unloadFont();
+    }
+#endif
 
     // tft.setCursor(HRES/8, (VRES/2)-30);
     // tft.print(hour);
@@ -534,6 +610,11 @@ void drawHomePage()
   // corruption → cycling partial draws + blank freeze.
   if (fullTurnSteps != 0) drawTracks();
 #endif
+
+  // fillScreen() above wiped any previously-drawn fast clock text; redraw it
+  // now that the home page's static layout is back in place. force=true —
+  // this only runs on page entry, not on every animation tick.
+  redrawFastClockIfKnown(true);
 
   // All drawing complete — release Core 0.
   _display_page_drawing = false;
@@ -1444,6 +1525,10 @@ void updateBridgeAnimation()
   // TFT_eSPI modes: drawBridge() erased the interior; restore track lines.
   drawTracks();
 #endif
+
+  // drawBridge()'s fillCircle() erase overlaps the fast clock's draw area;
+  // redraw it so it doesn't disappear every time the bridge moves.
+  redrawFastClockIfKnown();
 }
 
 // ===========================================================================
@@ -1516,6 +1601,9 @@ void updateDisplay()
       _display_dirty_flags &= ~DISP_DIRTY_TRACKS;
 #endif
       _display_dirty_flags &= ~DISP_DIRTY_BRIDGE;
+
+      // Bridge redraw overlaps the fast clock's draw area; restore it.
+      redrawFastClockIfKnown();
     }
 
     // --- Individual track lines ------------------------------------------
