@@ -27,6 +27,9 @@ risk.
 - **LCC bus power:** if the node feeds the bus, follow the bus power rules in the
   [Node Standard](https://github.com/bocabob/LCC_RPiPico_Common/blob/master/LCC_NODE_STANDARD.md): inject only from a 9–15 V supply that powers nothing else,
   never from a track, motor or LED supply.
+- **USB is for the bench:** flashing and the serial console. A USB cable to a mains-powered PC
+  ties the PC's ground to the node's, and through the LCC bus to the layout's, which can create a
+  ground loop. On the layout, configure the node over the LCC bus.
 - **The bridge moves by itself.** It homes itself and turns on LCC events sent from anywhere on
   the layout. Keep fingers, tools and rolling stock clear of the pit while the node is powered.
 - **The stepper driver and motor run hot** at their set current. Mount them where they can shed
@@ -215,7 +218,7 @@ procedure).
 
 ## Serial CLI Commands
 
-Connect at **115200 baud**. Commands common across the node family (Node Standard §11)
+Connect at **115200 baud** (USB, on the bench). Commands common across the node family (Node Standard §11)
 plus this project's own:
 
 | Key | Action |
