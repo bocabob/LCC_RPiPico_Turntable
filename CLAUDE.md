@@ -18,7 +18,7 @@ Required libraries (install via Arduino Library Manager):
 - `TFT_eSPI`, `I2C_eeprom`, `NeoPixelBus`, `Wire`
 
 There are no automated tests. Manual testing uses serial console commands in `loop()`:
-- `'c'` clear NVM, `'i'` reset to CDI defaults, `'r'` factory reset, `'p'` toggle message logging, `'m'` toggle config memory logging, `'x'` load app defaults, `'z'` re-apply config values from NVM
+- `clear` (NVM to 0x00) and `erase` (factory reset): whole words, confirmed with `'Y'` and followed by a reboot (`LCC_NODE_STANDARD.md` §11, Rev 32); `'i'` reset to CDI defaults, `'p'` toggle message logging, `'m'` toggle config memory logging, `'x'` load app defaults, `'z'` re-apply config values from NVM
 
 ## Architecture
 
